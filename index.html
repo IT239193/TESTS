@@ -1462,7 +1462,10 @@
                 base.series = get(cells, 'CPU Series');
                 base.watts = parseInt(get(cells, 'Wattage')) || 0;
                 base.multTS = parseFloat(get(cells, 'Mem Clock Multiplier (TS)')) || 0;
-                base.multTSX = parseFloat(get(cells, 'Mem Clock Multiplier (TSX)')) || 0;
+                base.multTSX = parseFloat(get(cells, 'Mem Clock Multiplier (TSX)')) || 0;   
+     base.memChannelMultTS = parseFloat(get(cells, 'Mem Channels Multiplier (TS)')) || 0;
+    base.memChannelMultTSX = parseFloat(get(cells, 'Mem Channels Multiplier (TSX)')) || 0;
+                base.maxMemChannels = parseInt(get(cells, 'Max Memory Channels')) || 2;
                 base.defaultMem = parseInt(get(cells, 'Default Memory Speed')) || 2133;
                 base.memTypes = get(cells, 'Supported Memory Types');
                 base.cores = get(cells, 'Cores');
@@ -2184,15 +2187,21 @@
                     if (builds.length >= maxPoolSize) break;
 
                     let ramCost = 0, ramWatts = 0, adjScore = baseScore;
-                    
-                    if (ram) {
-                        ramCost = ram.price * sticks;
-                        // ramWatts line is deleted (it defaults to 0 from the definition above)
-                        const m = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
-                        if (m && ram.freq > cpu.defaultMem) {
-                            adjScore += ((ram.freq - cpu.defaultMem) * m);
-                        }
-                    }
+
+if (ram) {
+    ramCost = ram.price * sticks;
+    
+    // RAM Frequency bonus (existing logic)
+    const memClockMult = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
+    if (memClockMult && ram.freq > cpu.defaultMem) {
+        adjScore += ((ram.freq - cpu.defaultMem) * memClockMult);
+    }
+    
+    // RAM Channel bonus (NEW - this makes stick count matter!)
+    const memChannelMult = currentMode === 'TS' ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
+    let activeChannels = Math.min(sticks, cpu.maxMemChannels);
+    adjScore += (memChannelMult * activeChannels);
+}
 
                     let mobo = null;
                     if (useMobo) {
