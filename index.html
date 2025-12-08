@@ -2396,7 +2396,7 @@
 
             let ramTiers = [];
             if (useRam) {
-                // 1. Filter RAMs: Note we removed ramSizes filter here to handle total capacity check later
+                // 1. Filter RAMs
                 let compatibleRam = allRams.filter(r => 
                     r.level <= lvl && 
                     cpu.memTypes.includes(r.type) && 
@@ -2405,8 +2405,23 @@
                     (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Freq Filter
                 );
                 
-                // NO GROUPING LOGIC (RESTORED MASSIVE RESULTS POOL)
-                ramTiers = compatibleRam;
+                // 2. Grouping Logic - RESTORED to increase unique build variety limit
+                const bestValueBySpec = new Map();
+                for (const r of compatibleRam) {
+                    const mfgr = r.mfgr || "Generic";
+                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
+                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
+                        bestValueBySpec.set(key, r);
+                    }
+                }
+                
+                // 3. Sort
+                ramTiers = Array.from(bestValueBySpec.values()).sort((a,b) => {
+                    if (a.type !== b.type) return a.type.localeCompare(b.type); 
+                    if (a.freq !== b.freq) return a.freq - b.freq;
+                    if (a.size !== b.size) return a.size - b.size;
+                    return a.price - b.price;
+                });
 
             } else {
                 ramTiers.push(null); 
@@ -2420,8 +2435,7 @@
 
                     let ramCost = 0;
                     if (ram) {
-                        // TOTAL RAM CAPACITY CHECK:
-                        // If user filtered for "128", we check if stick_size * sticks == 128
+                        // TOTAL RAM CAPACITY CHECK: Applied AFTER stick calculation
                         if (selectedOptions.ramSizes.size > 0 && !selectedOptions.ramSizes.has(ram.size * sticks)) {
                             continue;
                         }
