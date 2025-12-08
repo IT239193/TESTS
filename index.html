@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,6 +141,7 @@
             padding: 5px 15px;
             background: rgba(0,0,0,0.3);
             border-radius: 4px;
+            white-space: nowrap;
         }
         .warning-close:hover { color: #fff; background: var(--error); }
 
@@ -498,9 +500,9 @@
         }
 
         .score-range-text {
-            color: #95a5a6;
-            font-weight: 500;
-            font-size: 0.9em;
+            color: #7f8c8d;
+            font-weight: 600;
+            font-size: 0.95em;
             white-space: nowrap;
         }
 
@@ -1442,29 +1444,16 @@
     function handleRamSizeInput(event, input) {
         if (event.key === 'Enter') {
             event.preventDefault();
-            const val = input.value.trim();
-            if (!val) return;
+            const val = parseInt(input.value.trim());
+            if (isNaN(val)) return;
 
-            // Attempt to find an option that matches exactly
-            const container = document.getElementById('ramSizeListContainer');
-            const options = Array.from(container.querySelectorAll('.multi-option'));
+            // Add the typed value to the set, treating it as a new option
+            selectedOptions.ramSizes.add(val);
             
-            // Check based on data-value (which is a number for size)
-            const match = options.find(opt => opt.dataset.value == val);
-            
-            if (match) {
-                if (!match.classList.contains('selected')) {
-                    match.click(); // Trigger selection logic
-                }
-                // Clear input
-                input.value = "";
-                filterDropdownList(input); // Reset filter
-                document.getElementById('ramSizeDropdown').classList.remove('show'); // Close dropdown
-            } else {
-                // If typed value is not in list but looks like a number, maybe alert?
-                // For now, only selecting existing sizes is supported as these are filters.
-                // But user might type "128" and 128 exists.
-            }
+            // Visual feedback - normally we'd update UI but since it's custom input, we just refresh
+            input.value = "";
+            document.getElementById('ramSizeDropdown').classList.remove('show'); // Close dropdown
+            updateDisplayLabel('ramSizes');
         }
     }
 
@@ -2407,14 +2396,13 @@
 
             let ramTiers = [];
             if (useRam) {
-                // 1. Filter RAMs
+                // 1. Filter RAMs: Note we removed ramSizes filter here to handle total capacity check later
                 let compatibleRam = allRams.filter(r => 
                     r.level <= lvl && 
                     cpu.memTypes.includes(r.type) && 
                     (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
-                    (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.totalSize)) && // NEW Size Filter
-                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) && // NEW Brand Filter
-                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // NEW Freq Filter
+                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) && // Brand Filter
+                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Freq Filter
                 );
                 
                 // 2. Grouping Logic
@@ -2446,7 +2434,14 @@
                     if (builds.length >= maxPoolSize) break;
 
                     let ramCost = 0;
-                    if (ram) ramCost = ram.price * sticks;
+                    if (ram) {
+                        // TOTAL RAM CAPACITY CHECK:
+                        // If user filtered for "128", we check if stick_size * sticks == 128
+                        if (selectedOptions.ramSizes.size > 0 && !selectedOptions.ramSizes.has(ram.size * sticks)) {
+                            continue;
+                        }
+                        ramCost = ram.price * sticks;
+                    }
     
                     // IMPLEMENTATION: Use LIVE score logic
                     const liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
