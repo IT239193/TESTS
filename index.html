@@ -1410,6 +1410,47 @@
         }, 500);
     }
 
+
+
+    function parseHTML(filename, text) {
+        let type = '';
+        if(filename.includes('CPU')) type = 'cpu';
+        else if(filename.includes('GPU')) type = 'gpu'; // Covers both standard and water cooled
+        else if(filename.includes('RAM')) type = 'ram';
+        else if(filename.includes('Motherboard')) type = 'mobo';
+        else if(filename.includes('Cases')) type = 'cases';
+        else if(filename.includes('Coolers')) type = 'cooler';
+        else if(filename.includes('PSU')) type = 'psu';
+        else if(filename.includes('Fans')) type = 'fan';
+        else if(filename.includes('Storage')) type = 'storage';
+
+        if (!type || !DB[type]) return 0;
+
+        const rows = text.split('\n').map(r => r.trim()).filter(r => r);
+        if (rows.length < 2) return 0;
+
+        const headers = rows[0].split('\t').map(h => h.trim());
+        const get = (cells, col) => {
+            const idx = headers.indexOf(col);
+            return idx > -1 ? cells[idx] : null;
+        };
+
+        let addedCount = 0;
+
+        for (let i = 1; i < rows.length; i++) {
+            const cells = rows[i].split('\t');
+            if (cells.length < headers.length * 0.5) continue; // Skip malformed rows
+
+            const base = {};
+            base.name = get(cells, 'Part Name');
+            if (!base.name) continue;
+
+            base.price = parseFloat((get(cells, 'Price') || '0').replace(/[$,]/g, '')) || 0;
+            base.level = parseInt(get(cells, 'Level')) || 100;
+
+            // ... Your existing 'if (type === 'cpu')' logic follows here ...
+
+
     // ==================== FILE PARSING ====================
                 if (type === 'cpu') {
                 base.scoreTS = parseInt(get(cells, 'Basic CPU Score (TS)')) || 0;
