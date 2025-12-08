@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,7 +111,6 @@
             color: var(--text-muted);
             margin-top: 5px;
             font-weight: 500;
-            margin-bottom: 15px;
         }
 
         /* Controls */
@@ -351,12 +349,6 @@
             background: var(--accent);
             border-color: var(--accent);
         }
-        .multi-option.selected .cb-custom:after {
-            content: '✓';
-            font-size: 12px;
-            color: white;
-            font-weight: bold;
-        }
         .option-left { display: flex; align-items: center; flex: 1; overflow: hidden; }
 
         .cb-custom {
@@ -370,7 +362,13 @@
             border-radius: 3px;
             flex-shrink: 0;
         }
-        
+        .multi-option.selected .cb-custom:after {
+            content: '✓';
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+        }
+
         /* Quantity Controls */
         .qty-controls {
             display: flex;
@@ -407,16 +405,17 @@
             border: 1px solid var(--error);
             color: var(--text-main);
             padding: 15px;
-            margin: 0 auto 20px auto;
+            margin-bottom: 20px; /* moved up */
             border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 15px;
             font-weight: 500;
-            max-width: 900px;
         }
-        #perfWarning.hidden { display: none !important; }
+        #perfWarning.hidden { display: none; }
+        #perfWarning.permanently-hidden { display: none !important; }
+
         #perfWarning span { font-weight: bold; color: var(--error); }
         
         .warning-close {
@@ -487,20 +486,13 @@
             cursor: pointer;
         }
         
-        /* Stats Display */
-        .score-stats {
+        .score-stats-display {
             color: #95a5a6;
             font-weight: 500;
             font-size: 1.1em;
             margin-bottom: 5px;
-            text-align: right;
             width: 100%;
-        }
-
-        .min-score-wrapper {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            text-align: right;
         }
 
         .min-score-container {
@@ -912,6 +904,7 @@
             border-radius: 4px;
         }
 
+        /* Sadece RAM Models dropdown kutusunun yazısını büyütür */
         #multiRam .multi-select-display {
             font-size: 1.4em; 
         }
@@ -982,16 +975,16 @@
     <header>
         <h1>PCBS2 Ultimate Builder</h1>
         <div class="header-subtitle">contact me on discord for bug reports @timmy2131_</div>
-
-        <!-- MOVED WARNING MESSAGE HERE -->
-        <div id="perfWarning" class="hidden">
-            <div>
-                <span>⚠ PERFORMANCE WARNING:</span> 
-                If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
-            </div>
-            <div class="warning-close" onclick="closeWarning()">&times;</div>
-        </div>
     </header>
+
+    <!-- Warning Message Moved Here -->
+    <div id="perfWarning" class="hidden">
+        <div>
+            <span>⚠ PERFORMANCE WARNING:</span> 
+            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
+        </div>
+        <div class="warning-close" onclick="closeWarningPermanent()">&times;</div>
+    </div>
 
     <div class="controls-wrapper" id="controls">
         <div class="section-header">1. Benchmarking & Goals</div>
@@ -1037,7 +1030,7 @@
             <div class="input-group">
                 <label>Include RAM</label>
                 <div class="checkbox-container">
-                    <input type="checkbox" id="incRam" checked> <!-- Default Checked -->
+                    <input type="checkbox" id="incRam" checked> <!-- Checked Default -->
                     <label for="incRam">Suggest RAM</label>
                 </div>
             </div>
@@ -1051,13 +1044,24 @@
                 </select>
             </div>
             
-            <!-- CHANGED: Filter by Target RAM Capacity (Direct Input) -->
+            <!-- Filter by Target RAM Capacity (Total Size defined in RAM.txt) -->
             <div class="input-group">
-                <label>Target RAM Capacity (Total GB)</label>
-                <input type="number" id="targetRamCap" placeholder="e.g. 128" onkeydown="if(event.key==='Enter') generateBuilds()">
+                <label>Target RAM Capacity</label>
+                <div id="multiRamSize" class="multi-select-container">
+                    <div class="multi-select-display" onclick="toggleDropdown('ramSizeDropdown')">Any</div>
+                    <div id="ramSizeDropdown" class="multi-dropdown">
+                        <div class="dropdown-search-container">
+                            <input type="number" class="dropdown-search" placeholder="Type size (GB) & Enter..." onkeydown="handleCustomRamSize(event, this)">
+                        </div>
+                        <div class="quick-filter-bar">
+                            <button class="filter-btn btn-clear" onclick="clearFilter('ramSizes')">Clear</button>
+                        </div>
+                        <div class="dropdown-list-container" id="ramSizeListContainer"></div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Manufacturer Filter -->
+            <!-- Filter by Manufacturer -->
             <div class="input-group">
                 <label>RAM Manufacturer</label>
                 <div id="multiRamMfgr" class="multi-select-container">
@@ -1071,9 +1075,9 @@
                 </div>
             </div>
 
-            <!-- NEW: RAM Frequency -->
+            <!-- New: Filter by Frequency -->
             <div class="input-group">
-                <label>Ram Frequency</label>
+                <label>RAM Frequency</label>
                 <div id="multiRamFreq" class="multi-select-container">
                     <div class="multi-select-display" onclick="toggleDropdown('ramFreqDropdown')">Any</div>
                     <div id="ramFreqDropdown" class="multi-dropdown">
@@ -1303,7 +1307,7 @@
                 <input type="number" id="extraWatts" value="0">
             </div>
         </div>
-        
+
         <button class="btn-generate" onclick="generateBuilds()">GENERATE BUILDS</button>
     </div>
 
@@ -1330,9 +1334,10 @@
                 <option value="value_asc">Most Underperforming (Worst Value)</option>
             </select>
 
-            <!-- NEW: Score Stats Display + Min Score Input Wrapper -->
-            <div class="min-score-wrapper">
-                <div class="score-stats" id="scoreStatsDisplay">Lowest score in list: - | Highest Score in list: -</div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+                <!-- New Score Range Display -->
+                <div id="scoreRangeDisplay" class="score-stats-display">Lowest score in list: - | Highest Score in list: -</div>
+                
                 <div class="min-score-container">
                     <label class="min-score-label">Min 3D Score (press enter to apply):</label>
                     <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
@@ -1380,7 +1385,8 @@
         moboNames: new Set(),
         caseNames: new Set(),
         ramNames: new Set(),
-        ramMfgrs: new Set(), 
+        ramSizes: new Set(), // Filter by 'Total Size (GB)'
+        ramMfgrs: new Set(), // Filter by Manufacturer
         ramFreqs: new Set(), // New: Filter by Frequency
         // Changed to Map to store Counts for storage
         ssdNames: new Map(), // name -> count
@@ -1388,7 +1394,6 @@
     };
 
     let lastClickedOption = { category: null, index: -1 };
-    let perfWarningDismissed = false; // Track if warning is closed
 
     const filterKeywords = {
         cpuNames: {
@@ -1417,11 +1422,6 @@
     const formatNumber = num => num.toLocaleString('en-US');
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
-
-    function closeWarning() {
-        perfWarningDismissed = true;
-        document.getElementById('perfWarning').classList.add('hidden');
-    }
 
     // Helper to convert "1TB", "500GB", "500" into raw GB value
     function parseStorageInput(str) {
@@ -1460,6 +1460,11 @@
         Object.keys(Loaded).forEach(k => Loaded[k] = false);
 
         initGpuCountDropdown(); // Initialize specific static dropdown
+        
+        // Warning Persistence Check
+        if(localStorage.getItem('perfWarnClosed') === 'true') {
+            document.getElementById('perfWarning').classList.add('permanently-hidden');
+        }
 
         const targets = [
             { id: 'cpu',       file: 'CPU.txt',              label: 'CPU' },
@@ -1781,8 +1786,11 @@
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
-        // NEW: Populate RAM Manufacturers and Frequencies
+        // Populate RAM Total Sizes
+        populateMultiSelect('ramSizes', [...new Set(rams.map(r => r.totalSize).filter(s => s))].sort((a,b) => a-b), 'ramSizeListContainer');
+        // Populate RAM Manufacturers
         populateMultiSelect('ramMfgrs', [...new Set(rams.map(r => r.mfgr).filter(m => m))].sort(), 'ramMfgrListContainer');
+        // Populate RAM Frequencies
         populateMultiSelect('ramFreqs', [...new Set(rams.map(r => r.freq).filter(f => f))].sort((a,b) => a-b), 'ramFreqListContainer');
 
         // Populate Size Buttons for Storage
@@ -1911,7 +1919,7 @@
                     label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
                 }
             } else {
-                if (category === 'vram') label += ' GB';
+                if (category === 'vram' || category === 'ramSizes') label += ' GB';
                 if (category === 'length') label += ' mm';
                 if (category === 'ramFreqs') label += ' MHz';
             }
@@ -2023,6 +2031,23 @@
         updateDisplayLabel(category);
     }
 
+    // Handles the typing of custom RAM size numbers
+    function handleCustomRamSize(event, input) {
+        if (event.key === 'Enter') {
+            const val = parseInt(input.value);
+            if (!isNaN(val) && val > 0) {
+                // Add value to the set
+                selectedOptions.ramSizes.add(val);
+                // Refresh list so it shows as selected (or added if we supported ad-hoc rendering)
+                refreshDropdowns(); 
+                // Clear input
+                input.value = '';
+                // Update label
+                updateDisplayLabel('ramSizes');
+            }
+        }
+    }
+
     function applyQuickFilter(category, type) {
         const keywords = filterKeywords[category][type];
         if (!keywords) return;
@@ -2049,6 +2074,7 @@
         else if(category === 'length') containerId = 'lengthListContainer';
         else if(category === 'moboNames') containerId = 'moboListContainer';
         else if(category === 'ramNames') containerId = 'ramListContainer';
+        else if(category === 'ramSizes') containerId = 'ramSizeListContainer';
         else if(category === 'ramMfgrs') containerId = 'ramMfgrListContainer';
         else if(category === 'ramFreqs') containerId = 'ramFreqListContainer';
         else if(category === 'caseNames') containerId = 'caseListContainer';
@@ -2079,6 +2105,7 @@
             case 'gpuNames': displayId = 'multiGpu'; break;
             case 'gpuCounts': displayId = 'multiGpuCount'; break;
             case 'ramNames': displayId = 'multiRam'; break;
+            case 'ramSizes': displayId = 'multiRamSize'; break;
             case 'ramMfgrs': displayId = 'multiRamMfgr'; break;
             case 'ramFreqs': displayId = 'multiRamFreq'; break;
             case 'moboNames': displayId = 'multiMobo'; break;
@@ -2104,7 +2131,7 @@
             display.textContent = 'Any';
         } else if (size === 1) {
             let val = Array.from(selectedOptions[category])[0];
-            if (category === 'vram') val += ' GB';
+            if (category === 'vram' || category === 'ramSizes') val += ' GB';
             if (category === 'length') val += ' mm';
             if (category === 'ramFreqs') val += ' MHz';
             if (category === 'gpuCounts') {
@@ -2125,7 +2152,7 @@
                      firstVal = (firstVal === 1) ? "Single GPU" : (firstVal === 2 ? "Dual GPU" : (firstVal === 3 ? "Triple GPU" : "Quad GPU"));
                 }
                 
-                let suffix = (category === 'vram' ? ' GB' : (category === 'length' ? ' mm' : (category === 'ramFreqs' ? ' MHz' : '')));
+                let suffix = (category === 'vram' || category === 'ramSizes' ? ' GB' : (category === 'length' ? ' mm' : (category === 'ramFreqs' ? ' MHz' : '')));
                 display.textContent = `${firstVal}${suffix} + ${size - 1} others`;
             }
         }
@@ -2201,18 +2228,23 @@
         return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
     }
 
+    // New: Function to handle warning closure permanently
+    function closeWarningPermanent() {
+        document.getElementById('perfWarning').classList.add('permanently-hidden');
+        document.getElementById('perfWarning').classList.add('hidden');
+        localStorage.setItem('perfWarnClosed', 'true');
+    }
+
     function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for CPU and GPU files to load from datas/ folder!");
 
-        const targetRam = parseInt(document.getElementById('targetRamCap').value) || 0;
-
         // PERFORMANCE WARNING CHECK
-        const ramSpecific = selectedOptions.ramNames.size > 0 || selectedOptions.ramMfgrs.size > 0 || selectedOptions.ramFreqs.size > 0 || targetRam > 0;
+        const ramSpecific = selectedOptions.ramNames.size > 0 || selectedOptions.ramSizes.size > 0 || selectedOptions.ramMfgrs.size > 0 || selectedOptions.ramFreqs.size > 0;
         const generalSpecific = selectedOptions.cpuNames.size > 0 || selectedOptions.gpuNames.size > 0;
         const warningBox = document.getElementById('perfWarning');
+        const isPermanentlyClosed = localStorage.getItem('perfWarnClosed') === 'true';
         
-        // Show warning if filters are loose AND user hasn't dismissed it
-        if (!ramSpecific && !generalSpecific && !perfWarningDismissed) {
+        if (!ramSpecific && !generalSpecific && !isPermanentlyClosed) {
             warningBox.classList.remove('hidden');
         } else {
             warningBox.classList.add('hidden');
@@ -2362,9 +2394,9 @@
                     r.level <= lvl && 
                     cpu.memTypes.includes(r.type) && 
                     (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
-                    (targetRam === 0 || r.totalSize === targetRam) && // Target RAM Capacity Input Check
-                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) &&
-                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Freq Check
+                    (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.totalSize)) && // Size Filter
+                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) && // Brand Filter
+                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Frequency Filter
                 );
                 
                 // 2. Grouping Logic
@@ -2528,8 +2560,6 @@
             } 
         }
 
-        updateScoreStats(); // Calculate Stats based on unfiltered builds list
-
         // Initially sort based on selection (Optimization: do not just rely on renderPage for the first heavy lift)
         sortBuildsArray(builds, sort);
 
@@ -2537,26 +2567,30 @@
             builds = builds.slice(0, maxPoolSize);
         }
 
+        // New Score Range Logic
+        updateScoreStats(builds);
+
         document.getElementById('resCount').innerText = `${builds.length} Builds Found`;
         document.getElementById('pagination').style.display = builds.length > 0 ? 'flex' : 'none';
         renderPage(1);
     }
 
-    function updateScoreStats() {
-        const display = document.getElementById('scoreStatsDisplay');
-        if (builds.length === 0) {
+    function updateScoreStats(currentBuilds) {
+        const display = document.getElementById('scoreRangeDisplay');
+        if (!currentBuilds || currentBuilds.length === 0) {
             display.innerText = "Lowest score in list: - | Highest Score in list: -";
             return;
         }
 
-        let minS = builds[0].score;
-        let maxS = builds[0].score;
+        let minS = currentBuilds[0].score;
+        let maxS = currentBuilds[0].score;
 
-        for (let i = 1; i < builds.length; i++) {
-            if (builds[i].score < minS) minS = builds[i].score;
-            if (builds[i].score > maxS) maxS = builds[i].score;
+        for(let i=1; i<currentBuilds.length; i++) {
+            const s = currentBuilds[i].score;
+            if(s < minS) minS = s;
+            if(s > maxS) maxS = s;
         }
-        
+
         display.innerText = `Lowest score in list: ${formatNumber(minS)} | Highest Score in list: ${formatNumber(maxS)}`;
     }
     
