@@ -2405,23 +2405,8 @@
                     (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Freq Filter
                 );
                 
-                // 2. Grouping Logic
-                const bestValueBySpec = new Map();
-                for (const r of compatibleRam) {
-                    const mfgr = r.mfgr || "Generic";
-                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
-                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
-                        bestValueBySpec.set(key, r);
-                    }
-                }
-                
-                // 3. Sort
-                ramTiers = Array.from(bestValueBySpec.values()).sort((a,b) => {
-                    if (a.type !== b.type) return a.type.localeCompare(b.type); 
-                    if (a.freq !== b.freq) return a.freq - b.freq;
-                    if (a.size !== b.size) return a.size - b.size;
-                    return a.price - b.price;
-                });
+                // NO GROUPING LOGIC (RESTORED MASSIVE RESULTS POOL)
+                ramTiers = compatibleRam;
 
             } else {
                 ramTiers.push(null); 
