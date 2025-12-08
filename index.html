@@ -840,6 +840,18 @@
             border-radius: 4px;
         }
 
+.btn-size-filter {
+            padding: 5px 10px;
+            font-size: 0.85em;
+            background: transparent;
+            border: 1px solid #777;
+            color: #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: 600;
+        }
+
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -1488,21 +1500,21 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                base.sizeStr = get(cells, 'Size');
+                // FIXED: Column name matches Storage.txt exactly "Size (GB)"
+                let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
                 
-                // Parsing speed safely to avoid "0 MB/s" errors
-                let speedRaw = get(cells, 'Transfer Speed');
-                if(!speedRaw) speedRaw = get(cells, 'Speed'); // Fallback
+                base.sizeGB = sizeVal;
                 
-                // Remove commas and non-numeric characters before parsing
-                base.speed = parseInt(speedRaw.replace(/[^0-9]/g, '')) || 0;
+                // Generate friendly string for buttons (e.g., 1000 -> "1TB")
+                if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
+                else base.sizeStr = sizeVal + 'GB';
+
+                // Speed parsing
+                let speedRaw = get(cells, 'Speed'); // Matches Storage.txt "Speed"
+                if (!speedRaw) speedRaw = get(cells, 'Transfer Speed'); // Fallback
+                base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
                 
                 base.type = get(cells, 'Type');
-                
-                // Normalize Size for filtering
-                let norm = parseFloat(base.sizeStr);
-                if(base.sizeStr.includes('TB')) norm *= 1024;
-                base.sizeGB = norm;
             }
 
             DB[type].set(base.name, base);
@@ -1620,18 +1632,19 @@
 
     function populateStorageSizeButtons(type, list) {
         const container = document.getElementById(type + 'QuickFilter');
-        // Remove old buttons (keep the Clear button)
+        
+        // Remove old size buttons (keep the "Clear" button which is .btn-clear)
         const oldBtns = container.querySelectorAll('.btn-size-filter');
         oldBtns.forEach(b => b.remove());
 
+        // Get unique size strings (e.g., "120GB", "1TB")
         const uniqueSizes = [...new Set(list.map(s => s.sizeStr))];
         
-        // Sort sizes logic: MB < GB < TB
+        // Sort sizes logic: GB < TB, then numeric value
         uniqueSizes.sort((a,b) => {
             const getVal = (str) => {
                 let n = parseFloat(str);
-                if(str.includes('TB')) n *= 1024 * 1024;
-                else if(str.includes('GB')) n *= 1024;
+                if(str.includes('TB')) n *= 1024;
                 return n;
             }
             return getVal(a) - getVal(b);
@@ -1639,8 +1652,15 @@
 
         uniqueSizes.forEach(size => {
             const btn = document.createElement('button');
-            btn.className = 'filter-btn btn-size-filter';
+            btn.className = 'filter-btn btn-size-filter'; // Add specific class
+            btn.style.borderColor = 'var(--brand-aux)';
+            btn.style.color = '#ccc';
             btn.innerText = size;
+            
+            // Hover effect logic handled by CSS generally, but inline style helps visibility
+            btn.onmouseover = function() { this.style.color = '#fff'; this.style.background = 'var(--brand-aux)'; };
+            btn.onmouseout = function() { this.style.color = '#ccc'; this.style.background = 'transparent'; };
+
             btn.onclick = () => applySizeFilter(type, size);
             container.appendChild(btn);
         });
@@ -2612,4 +2632,3 @@
 </script>
 </body>
 </html>
-```
