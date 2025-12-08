@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Smart Component Sorting</title>
+    <title>PCBS2 Ultimate Pro Builder - Strict Multi-GPU & Storage</title>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -332,6 +332,17 @@
 
         .btn-nvidia { border-color: var(--brand-nvidia); color: var(--brand-nvidia); }
         .btn-nvidia:hover { background: var(--brand-nvidia); color: white; }
+
+        /* New Size Buttons */
+        .btn-size-filter {
+            background: rgba(52, 152, 219, 0.1);
+            border-color: var(--accent);
+            color: var(--text-muted);
+        }
+        .btn-size-filter:hover {
+            background: var(--accent);
+            color: white;
+        }
 
         .dropdown-search-container {
             padding: 8px;
@@ -840,16 +851,6 @@
             border-radius: 4px;
         }
 
-.btn-size-filter {
-            background: rgba(52, 152, 219, 0.1);
-            border-color: var(--accent);
-            color: var(--text-muted);
-        }
-        .btn-size-filter:hover {
-            background: var(--accent);
-            color: white;
-        }
-
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -1040,6 +1041,18 @@
             <div class="checkbox-container">
                 <input type="checkbox" id="incStorage" checked>
                 <label for="incStorage">Include Storage</label>
+            </div>
+        </div>
+        
+        <!-- NEW STORAGE SETTINGS -->
+        <div class="input-grid" style="margin-top: 10px;">
+            <div class="input-group">
+                <label>Min SSD Size</label>
+                <input type="text" id="minSSDSize" placeholder="e.g. 500GB or 1TB">
+            </div>
+            <div class="input-group">
+                <label>Min HDD Size</label>
+                <input type="text" id="minHDDSize" placeholder="e.g. 2TB">
             </div>
         </div>
 
@@ -1309,6 +1322,16 @@
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
 
+    // Helper to convert "1TB", "500GB", "500" into raw GB value
+    function parseStorageInput(str) {
+        if (!str) return 0;
+        str = str.toUpperCase().trim();
+        let val = parseFloat(str);
+        if (isNaN(val)) return 0;
+        if (str.includes('TB')) return val * 1024;
+        return val; // Default to GB
+    }
+
     // ==================== INPUT FORMATTING ====================
     ['budget', 'targetScore', 'minScoreInput', 'resLimit'].forEach(id => {
         const el = document.getElementById(id);
@@ -1498,17 +1521,17 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                // 1. Get Size
+                // FIX: Use specific "Size (GB)" column to avoid parsing errors
                 let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
                 base.sizeGB = sizeVal;
+                
+                // Create clean string for buttons (e.g. 1000 -> 1TB)
                 if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
                 else base.sizeStr = sizeVal + 'GB';
 
-                // 2. Get Speed (Try 'Speed' column, fallback to 'Transfer Speed')
+                // FIX: Ensure Speed is read from the correct column
                 let speedRaw = get(cells, 'Speed'); 
                 if (!speedRaw) speedRaw = get(cells, 'Transfer Speed');
-                
-                // Clean non-numeric characters (like ' MB/s')
                 base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
                 
                 base.type = get(cells, 'Type');
@@ -1585,7 +1608,6 @@
         const rams = Array.from(DB.ram.values()).filter(r => r.level <= currentLvl);
         const allStorage = Array.from(DB.storage.values()).filter(s => s.level <= currentLvl);
         
-        // Define lists ONCE
         const ssdList = allStorage.filter(s => s.type === 'SSD' || s.type === 'M.2');
         const hddList = allStorage.filter(s => s.type === 'HDD');
         
@@ -1607,15 +1629,13 @@
         populateMultiSelect('caseNames', cases.map(c => c.name).sort(), 'caseListContainer');
         populateMultiSelect('ramNames', rams.map(r => r.name).sort(), 'ramListContainer');
         
-        // Populate Storage Dropdowns
+        // Populating SSD and HDD dropdowns
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
-        // Populate Size Buttons (Check if function exists before calling)
-        if (typeof populateStorageSizeButtons === "function") {
-            populateStorageSizeButtons('ssd', ssdList);
-            populateStorageSizeButtons('hdd', hddList);
-        }
+        // Populate Size Buttons
+        populateStorageSizeButtons('ssd', ssdList);
+        populateStorageSizeButtons('hdd', hddList);
 
         const stickSelect = document.getElementById('ramSticks');
         const fourStickOption = stickSelect.querySelector('option[value="4"]');
@@ -1633,19 +1653,18 @@
 
     function populateStorageSizeButtons(type, list) {
         const container = document.getElementById(type + 'QuickFilter');
-        
-        // Remove old size buttons (keep the "Clear" button)
+        // Remove old buttons (keep the Clear button)
         const oldBtns = container.querySelectorAll('.btn-size-filter');
         oldBtns.forEach(b => b.remove());
 
-        // Get unique size strings
         const uniqueSizes = [...new Set(list.map(s => s.sizeStr))];
         
-        // Sort: GB first, then TB
+        // Sort sizes logic: MB < GB < TB
         uniqueSizes.sort((a,b) => {
             const getVal = (str) => {
                 let n = parseFloat(str);
-                if(str.includes('TB')) n *= 1024;
+                if(str.includes('TB')) n *= 1024 * 1024;
+                else if(str.includes('GB')) n *= 1024;
                 return n;
             }
             return getVal(a) - getVal(b);
@@ -1658,27 +1677,6 @@
             btn.onclick = () => applySizeFilter(type, size);
             container.appendChild(btn);
         });
-    }
-
-    function applySizeFilter(type, sizeStr) {
-        const category = type + 'Names';
-        const containerId = type + 'ListContainer';
-        const container = document.getElementById(containerId);
-        const options = container.querySelectorAll('.multi-option');
-        
-        const fullList = type === 'ssd' ? 
-            Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
-            Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
-
-        const matchingNames = fullList.filter(s => s.sizeStr === sizeStr).map(s => s.name);
-        
-        matchingNames.forEach(name => selectedOptions[category].add(name));
-        
-        options.forEach(opt => {
-            if(matchingNames.includes(opt.dataset.value)) opt.classList.add('selected');
-        });
-
-        updateDisplayLabel(category);
     }
 
     function applySizeFilter(type, sizeStr) {
@@ -1941,12 +1939,16 @@
         const usePsu = document.getElementById('incPsu').checked && Loaded.psu;
         const useFan = document.getElementById('incFans').checked && Loaded.fan;
         const useStorage = document.getElementById('incStorage').checked && Loaded.storage;
+        
+        // Read Min Size inputs
+        const minSSDVal = parseStorageInput(document.getElementById('minSSDSize').value);
+        const minHDDVal = parseStorageInput(document.getElementById('minHDDSize').value);
 
         if (useMobo) allMobos.sort((a,b) => a.price - b.price);
         if (useCase) allCases.sort((a,b) => a.price - b.price);
         if (usePsu) allPsu.sort((a,b) => a.price - b.price);
         
-        // Smart Sorting Logic for Auxiliary Components
+        // Smart Sorting Logic
         const getSmartSort = (metric) => (a, b) => {
             // High Score -> High Perf
             if (sort === 'score_desc') return b[metric] - a[metric] || b.price - a.price;
@@ -1969,7 +1971,24 @@
         
         if (useCooler) allCoolers.sort(getSmartSort('flow'));
         if (useFan) allFans.sort(getSmartSort('flow'));
-        if (useStorage) allStorage.sort(getSmartSort('speed'));
+        
+        // Smart Sort: Storage
+        if (useStorage) {
+            // Priority check: If user selected specific SSDs, push them to top
+            allStorage.sort((a, b) => {
+                const isSSDA = (a.type === 'SSD' || a.type === 'M.2');
+                const isSSDB = (b.type === 'SSD' || b.type === 'M.2');
+                const selA = isSSDA ? selectedOptions.ssdNames.has(a.name) : selectedOptions.hddNames.has(a.name);
+                const selB = isSSDB ? selectedOptions.ssdNames.has(b.name) : selectedOptions.hddNames.has(b.name);
+                
+                // If one is selected and other isn't, selected wins
+                if (selA && !selB) return -1;
+                if (!selA && selB) return 1;
+                
+                // Otherwise fallback to Smart Sort
+                return getSmartSort('speed')(a, b);
+            });
+        }
 
         const validCpu = allCpus.filter(c => {
             if (c.level > lvl) return false;
@@ -2114,12 +2133,19 @@
                         let storages = [];
                         let storageCost = 0;
                         if (useStorage) {
-                            // Logic: Try to pick 1 Primary SSD. If filtered, respect filters.
+                            // Logic: Pick storage based on constraints
                             const validStorage = allStorage.filter(s => {
                                 if (s.level > lvl) return false;
                                 const isSSD = (s.type === 'SSD' || s.type === 'M.2');
+                                
+                                // NEW: Min Size Check
+                                if (isSSD && minSSDVal > 0 && s.sizeGB < minSSDVal) return false;
+                                if (!isSSD && minHDDVal > 0 && s.sizeGB < minHDDVal) return false;
+
+                                // Existing Filters
                                 if (selectedOptions.ssdNames.size > 0 && isSSD && !selectedOptions.ssdNames.has(s.name)) return false;
                                 if (selectedOptions.hddNames.size > 0 && !isSSD && !selectedOptions.hddNames.has(s.name)) return false;
+                                
                                 return true;
                             });
 
@@ -2520,7 +2546,7 @@
                 const isSelected = currentDrives.some(d => d.name === p.name);
                 const isSSD = (p.type === 'SSD' || p.type === 'M.2');
                 
-                // Constraints
+                // Constraints (Slot Limit only)
                 const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
                 const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
                 const slotsFull = currentSameType.length >= slotCount;
@@ -2533,7 +2559,6 @@
                     actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}')">ADD</button>`;
                 }
                 
-                // No cost diff calc for add mode, just price
                 diffStr = formatCurrency(p.price);
 
             } else {
@@ -2576,7 +2601,7 @@
             build.storages.splice(existsIdx, 1);
             build.price -= newPart.price;
         } else {
-            // Add (We trust the button state logic in refreshPopup to prevent invalid adds)
+            // Add
             build.storages.push(newPart);
             build.price += newPart.price;
         }
