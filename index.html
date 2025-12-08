@@ -1278,12 +1278,6 @@
     <div class="results-meta">
         <div class="result-count" id="resCount">Ready</div>
         <div class="sort-controls">
-            <!-- Compact View Toggle -->
-            <div class="checkbox-container" style="background:transparent; border:none; padding:0;">
-                <input type="checkbox" id="compactMode" onchange="toggleCompactMode()">
-                <label for="compactMode">Compact View</label>
-            </div>
-
             <label>Sort By:</label>
             <select id="mainSort" class="sort-select" onchange="renderPage(1)">
                 <option value="diff">Closest to Target Score</option>
@@ -1301,6 +1295,7 @@
             </div>
         </div>
     </div>
+
 
     <div id="resultsList"></div>
 
@@ -2401,13 +2396,6 @@ let psu = null;
         const total = Math.ceil(builds.length / itemsPerPage);
 
         const list = document.getElementById('resultsList');
-        // Apply compact mode if checked
-        if (document.getElementById('compactMode').checked) {
-             list.classList.add('compact-mode');
-        } else {
-             list.classList.remove('compact-mode');
-        }
-
         list.innerHTML = '';
 
         slice.forEach((b, i) => {
