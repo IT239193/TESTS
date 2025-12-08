@@ -1610,9 +1610,7 @@
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
 
-                // Populating SSD and HDD dropdowns
-        const ssdList = allStorage.filter(s => s.type === 'SSD' || s.type === 'M.2');
-        const hddList = allStorage.filter(s => s.type === 'HDD');
+
 
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
