@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Quantity Control</title>
+    <title>PCBS2 Ultimate Pro Builder - Live Calculator</title>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -1242,6 +1242,12 @@
     <div class="results-meta">
         <div class="result-count" id="resCount">Ready</div>
         <div class="sort-controls">
+            <!-- IMPLEMENTATION: OVERCLOCK TOGGLE -->
+            <div class="checkbox-container" style="margin-right: 15px;">
+                <input type="checkbox" id="useOC" onchange="generateBuilds()">
+                <label for="useOC">Use CPU overclocked values</label>
+            </div>
+
             <label>Sort By:</label>
             <select id="mainSort" class="sort-select" onchange="renderPage(1)">
                 <option value="diff">Closest to Target Score</option>
@@ -1461,10 +1467,18 @@
                 base.socket = get(cells, 'CPU Socket');
                 base.series = get(cells, 'CPU Series');
                 base.watts = parseInt(get(cells, 'Wattage')) || 0;
+                
+                // IMPLEMENTATION: Parse Data for Live Calculation
+                base.coreClockMultTS = parseFloat(get(cells, 'Core Clock Multiplier (TS)')) || 0;
                 base.multTS = parseFloat(get(cells, 'Mem Clock Multiplier (TS)')) || 0;
+                base.memChannelMultTS = parseFloat(get(cells, 'Mem Channels Multiplier (TS)')) || 0;
+                base.finalAdjTS = parseFloat(get(cells, 'Final Adjustment (TS)')) || 0;
+
+                base.coreClockMultTSX = parseFloat(get(cells, 'Core Clock Multiplier (TSX)')) || 0;
                 base.multTSX = parseFloat(get(cells, 'Mem Clock Multiplier (TSX)')) || 0;   
-     base.memChannelMultTS = parseFloat(get(cells, 'Mem Channels Multiplier (TS)')) || 0;
-    base.memChannelMultTSX = parseFloat(get(cells, 'Mem Channels Multiplier (TSX)')) || 0;
+                base.memChannelMultTSX = parseFloat(get(cells, 'Mem Channels Multiplier (TSX)')) || 0;
+                base.finalAdjTSX = parseFloat(get(cells, 'Final Adjustment (TSX)')) || 0;
+
                 base.maxMemChannels = parseInt(get(cells, 'Max Memory Channels')) || 2;
                 base.defaultMem = parseInt(get(cells, 'Default Memory Speed')) || 2133;
                 base.memTypes = get(cells, 'Supported Memory Types');
@@ -1995,6 +2009,44 @@
     }
 
     // ==================== 3DMARK CALCULATION ====================
+    
+    // IMPLEMENTATION: Live CPU Score Calculator
+    function calculateCpuScore(cpu, ram, stickCount, mode, useOC) {
+        // 1. Determine Freq
+        let rawFreq = useOC ? cpu.maxFreq : cpu.baseFreq;
+        let freq = parseFloat(rawFreq) || 0;
+
+        // 2. Select Multipliers
+        const isTS = (mode === 'TS');
+        const coreMult = isTS ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
+        const memChanMult = isTS ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
+        const memClockMult = isTS ? cpu.multTS : cpu.multTSX;
+        const adjustment = isTS ? cpu.finalAdjTS : cpu.finalAdjTSX;
+
+        // 3. RAM Logic
+        let activeChannels, actualMemSpeed;
+        if (ram) {
+            // Enabled: MIN(Sticks, MaxSupported)
+            activeChannels = Math.min(stickCount, cpu.maxMemChannels);
+            actualMemSpeed = ram.freq;
+        } else {
+            // Disabled: Use CPU Defaults
+            activeChannels = cpu.maxMemChannels;
+            actualMemSpeed = cpu.defaultMem;
+        }
+
+        // 4. Formula
+        // Score = FLOOR ( ( (CoreMult * Freq) + (ChanMult * ActiveChans) + (MemClockMult * Speed) + Adj ) * 298 )
+        const coreScore = coreMult * freq;
+        const chanScore = memChanMult * activeChannels;
+        const speedScore = memClockMult * actualMemSpeed;
+        
+        const sum = coreScore + chanScore + speedScore + adjustment;
+        const final = Math.floor(sum * 298);
+
+        return final > 0 ? final : 0;
+    }
+
     function calculate3DMark(cpuScore, gpuScore) {
         if (!cpuScore || !gpuScore) return 0;
         return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
@@ -2012,8 +2064,6 @@
         const allPsu = Array.from(DB.psu.values());
         const allFans = Array.from(DB.fan.values());
         
-        // No longer fetching allStorage directly for random selection, 
-        // will rely on specific selections or basic fallback.
         const allStorage = Array.from(DB.storage.values());
 
         const budget = parseVal('budget');
@@ -2023,13 +2073,12 @@
         const gpuCnt = parseInt(document.getElementById('gpuCount').value);
         const maxPoolSize = parseIntVal('resLimit'); 
         const sort = document.getElementById('mainSort').value;
+        const useOC = document.getElementById('useOC').checked; // Check Toggle State
 
         const limitTotalW = parseInt(document.getElementById('maxTotalWatts').value);
         const limitCpuW = parseInt(document.getElementById('maxCpuWatts').value);
         const limitGpuW = parseInt(document.getElementById('maxGpuWatts').value);
-
         const extraW = parseInt(document.getElementById('extraWatts').value) || 0;
-
 
         const useRam = document.getElementById('incRam').checked && Loaded.ram;
         const reqSticks = parseInt(document.getElementById('ramSticks').value);
@@ -2071,13 +2120,11 @@
         if (useFan) allFans.sort(getSmartSort('flow'));
 
         // ================= PRE-CALCULATE STORAGE =================
-        // Construct the specific list of storage devices to include
         let finalStorageList = [];
         let totalStorageCost = 0;
         let requiredSSDSlots = 0;
         let requiredHDDSlots = 0;
 
-        // Add Specific SSDs (based on quantity)
         selectedOptions.ssdNames.forEach((count, name) => {
             const part = DB.storage.get(name);
             if (part && part.level <= lvl) {
@@ -2089,7 +2136,6 @@
             }
         });
 
-        // Add Specific HDDs (based on quantity)
         selectedOptions.hddNames.forEach((count, name) => {
             const part = DB.storage.get(name);
             if (part && part.level <= lvl) {
@@ -2101,8 +2147,6 @@
             }
         });
 
-        // Fallback: If "Include Storage" is checked but NO specific drives selected, add one cheap SSD
-        // (Assuming user wants something if they checked the box but didn't pick specific)
         if (useStorage && finalStorageList.length === 0) {
             const fallback = allStorage.filter(s => s.type !== 'HDD' && s.level <= lvl).sort((a,b) => a.price - b.price)[0];
             if (fallback) {
@@ -2131,7 +2175,6 @@
             if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
             if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
 
-            // Strict Multi-GPU Whitelist Logic
             if (gpuCnt > 1) {
                 const maxCap = getMultiGPUCap(g.name, g.length);
                 if (maxCap < gpuCnt) return false;
@@ -2156,9 +2199,6 @@
         
         for (const cpu of validCpu) {
             if (builds.length >= maxPoolSize) break;
-
-            let baseScore = currentMode === 'TS' ? cpu.scoreTS : cpu.scoreTSX;
-            if (!baseScore) continue;
 
             let ramTiers = [];
             if (useRam) {
@@ -2186,22 +2226,14 @@
                 for(const sticks of stickCounts) {
                     if (builds.length >= maxPoolSize) break;
 
-                    let ramCost = 0, ramWatts = 0, adjScore = baseScore;
-
-if (ram) {
-    ramCost = ram.price * sticks;
+                    let ramCost = 0;
+                    if (ram) ramCost = ram.price * sticks;
     
-    // RAM Frequency bonus (existing logic)
-    const memClockMult = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
-    if (memClockMult && ram.freq > cpu.defaultMem) {
-        adjScore += ((ram.freq - cpu.defaultMem) * memClockMult);
-    }
-    
-    // RAM Channel bonus (NEW - this makes stick count matter!)
-    const memChannelMult = currentMode === 'TS' ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
-    let activeChannels = Math.min(sticks, cpu.maxMemChannels);
-    adjScore += (memChannelMult * activeChannels);
-}
+                    // IMPLEMENTATION: Use LIVE score logic
+                    // Pass current CPU, RAM selection, and OC toggle state
+                    const liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
+                    
+                    if (liveCpuScore === 0) continue; // Skip invalid configs
 
                     let mobo = null;
                     if (useMobo) {
@@ -2220,7 +2252,6 @@ if (ram) {
                     }
 
                     for (const gpu of validGpu) {
-                        // Multi GPU Compatibility Checks
                         if (gpuCnt > 1) {
                             if (mobo) {
                                 if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
@@ -2241,12 +2272,10 @@ if (ram) {
                                 if (mobo && !c.moboSizes.includes(mobo.size)) return false;
                                 if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
                                 
-                                // Specific Multi-GPU filter
                                 if (gpuCnt > 1) {
                                     if (c.gpuSlots < 3) return false;
                                 }
 
-                                // Storage Count Filter (Ensure Case has enough slots)
                                 if (requiredSSDSlots > c.ssdSlots) return false;
                                 if (requiredHDDSlots > c.hddSlots) return false;
 
@@ -2258,14 +2287,11 @@ if (ram) {
 
                         let cooler = null;
                         if (useCooler) {
-                            // Picking the first sorted cooler based on smart sort logic above
                             cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
                             if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
                         }
 
-let psu = null;
-                        
-                        // NEW FORMULA: Pure CPU + GPU + Your Manual Extra Input
+                        let psu = null;
                         const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
                         
                         if (usePsu) {
@@ -2281,7 +2307,6 @@ let psu = null;
 
                         let fan = null, fanCost = 0;
                         if (useFan && bCase) {
-                             // Picking the first sorted fan
                             const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
                             if(found) {
                                 fan = found;
@@ -2299,17 +2324,19 @@ let psu = null;
 
                         if (total > budget) continue;
 
-                        const final3D = calculate3DMark(adjScore, gpuScore);
+                        // Use LIVE CPU SCORE in final calc
+                        const final3D = calculate3DMark(liveCpuScore, gpuScore);
                         if (minScore > 0 && final3D < minScore) continue;
 
                         builds.push({
                             score: final3D,
+                            liveCpuScore: liveCpuScore, // Store calculated score
                             diff: final3D - target,
                             price: total,
                             watts: totalWatts,
                             cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
                             case: bCase, cooler, psu, fan, 
-                            storages: [...finalStorageList] // Clone array
+                            storages: [...finalStorageList] 
                         });
                         
                         if (builds.length >= maxPoolSize) break;
@@ -2344,6 +2371,8 @@ let psu = null;
         }
 
         const sort = document.getElementById('mainSort').value;
+        const useOC = document.getElementById('useOC').checked;
+        
         builds.sort((a,b) => {
             if (sort === 'score_desc') return b.score - a.score;
             if (sort === 'score_asc') return a.score - b.score;
@@ -2383,11 +2412,14 @@ let psu = null;
                 Base Mem/Max Mem: ${b.gpu.baseMem || '?'}/${b.gpu.maxMem || '?'} MHz
             `;
             
-            const cpuBaseScore = currentMode === 'TS' ? b.cpu.scoreTS : b.cpu.scoreTSX;
-            const ocText = b.cpu.canOC === 'Yes' ? `OC: ${b.cpu.ocScore}` : 'Locked';
+            // Display Live Score
+            const displayCpuScore = b.liveCpuScore;
+            
+            const ocStatus = useOC ? "(OC Enabled)" : "(Base)";
+            const ocText = b.cpu.canOC === 'Yes' ? `OC Potential: ${b.cpu.ocScore}` : 'Locked';
             
             const cpuSpecs = `
-                Score: ${formatNumber(cpuBaseScore)} | ${ocText} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
+                Score: ${formatNumber(displayCpuScore)} ${ocStatus} | ${ocText} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
                 ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
                 ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
             `;
