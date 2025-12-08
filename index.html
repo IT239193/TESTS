@@ -1498,17 +1498,17 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                // FIX 1: Read 'Size (GB)' specifically to fix NaN issue
+                // 1. Get Size
                 let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
                 base.sizeGB = sizeVal;
-                
-                // Create clean string for buttons (e.g. 1000 -> 1TB)
                 if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
                 else base.sizeStr = sizeVal + 'GB';
 
-                // FIX 2: Ensure Speed is read from the correct column
+                // 2. Get Speed (Try 'Speed' column, fallback to 'Transfer Speed')
                 let speedRaw = get(cells, 'Speed'); 
                 if (!speedRaw) speedRaw = get(cells, 'Transfer Speed');
+                
+                // Clean non-numeric characters (like ' MB/s')
                 base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
                 
                 base.type = get(cells, 'Type');
@@ -1585,6 +1585,7 @@
         const rams = Array.from(DB.ram.values()).filter(r => r.level <= currentLvl);
         const allStorage = Array.from(DB.storage.values()).filter(s => s.level <= currentLvl);
         
+        // Define lists ONCE
         const ssdList = allStorage.filter(s => s.type === 'SSD' || s.type === 'M.2');
         const hddList = allStorage.filter(s => s.type === 'HDD');
         
@@ -1596,7 +1597,7 @@
             c.level <= currentLvl && c.gpuSlots >= caseFilterMinGPU
         );
 
-        // Populate Dropdowns with Filtered Data
+        // Populate Dropdowns
         populateMultiSelect('socket', [...new Set(cpus.map(c => c.socket).filter(s => s))].sort(), 'socketListContainer');
         populateMultiSelect('cpuNames', cpus.map(c => c.name).sort(), 'cpuListContainer');
         populateMultiSelect('vram', [...new Set(gpus.map(g => g.vram).filter(v => v))].sort((a,b) => a-b), 'vramListContainer');
@@ -1606,18 +1607,15 @@
         populateMultiSelect('caseNames', cases.map(c => c.name).sort(), 'caseListContainer');
         populateMultiSelect('ramNames', rams.map(r => r.name).sort(), 'ramListContainer');
         
-        // Populating SSD and HDD dropdowns + Size Buttons
-        populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
-        populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
-
-
-
+        // Populate Storage Dropdowns
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
-        // Populate Size Buttons
-        populateStorageSizeButtons('ssd', ssdList);
-        populateStorageSizeButtons('hdd', hddList);
+        // Populate Size Buttons (Check if function exists before calling)
+        if (typeof populateStorageSizeButtons === "function") {
+            populateStorageSizeButtons('ssd', ssdList);
+            populateStorageSizeButtons('hdd', hddList);
+        }
 
         const stickSelect = document.getElementById('ramSticks');
         const fourStickOption = stickSelect.querySelector('option[value="4"]');
@@ -1747,9 +1745,11 @@
             } else if (category === 'caseNames') {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
-            } else if (category === 'ssdNames' || category === 'hddNames') {
-                const s = DB.storage.get(opt);
-                if (s) label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.type}</span>`;
+} else if (category === 'ssdNames' || category === 'hddNames') {
+            const s = DB.storage.get(opt);
+            if (s) {
+                // FIXED: Now displays Size AND Speed specifically
+                label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
             } else {
                 if (category === 'vram') label += ' GB';
                 if (category === 'length') label += ' mm';
