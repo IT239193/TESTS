@@ -841,15 +841,13 @@
         }
 
 .btn-size-filter {
-            padding: 5px 10px;
-            font-size: 0.85em;
-            background: transparent;
-            border: 1px solid #777;
-            color: #ccc;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: 0.2s;
-            font-weight: 600;
+            background: rgba(52, 152, 219, 0.1);
+            border-color: var(--accent);
+            color: var(--text-muted);
+        }
+        .btn-size-filter:hover {
+            background: var(--accent);
+            color: white;
         }
 
         @keyframes slideIn {
@@ -1500,21 +1498,21 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                // FIXED: Column name matches Storage.txt exactly "Size (GB)"
+                // FIX 1: Read 'Size (GB)' specifically to fix NaN issue
                 let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
-                
                 base.sizeGB = sizeVal;
                 
-                // Generate friendly string for buttons (e.g., 1000 -> "1TB")
+                // Create clean string for buttons (e.g. 1000 -> 1TB)
                 if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
                 else base.sizeStr = sizeVal + 'GB';
 
-                // Speed parsing
-                let speedRaw = get(cells, 'Speed'); // Matches Storage.txt "Speed"
-                if (!speedRaw) speedRaw = get(cells, 'Transfer Speed'); // Fallback
+                // FIX 2: Ensure Speed is read from the correct column
+                let speedRaw = get(cells, 'Speed'); 
+                if (!speedRaw) speedRaw = get(cells, 'Transfer Speed');
                 base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
                 
                 base.type = get(cells, 'Type');
+                base.mfgr = get(cells, 'Manufacturer');
             }
 
             DB[type].set(base.name, base);
@@ -1611,6 +1609,13 @@
         // Populating SSD and HDD dropdowns + Size Buttons
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
+
+                // Populating SSD and HDD dropdowns
+        const ssdList = allStorage.filter(s => s.type === 'SSD' || s.type === 'M.2');
+        const hddList = allStorage.filter(s => s.type === 'HDD');
+
+        populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
+        populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
         // Populate Size Buttons
         populateStorageSizeButtons('ssd', ssdList);
@@ -1633,14 +1638,14 @@
     function populateStorageSizeButtons(type, list) {
         const container = document.getElementById(type + 'QuickFilter');
         
-        // Remove old size buttons (keep the "Clear" button which is .btn-clear)
+        // Remove old size buttons (keep the "Clear" button)
         const oldBtns = container.querySelectorAll('.btn-size-filter');
         oldBtns.forEach(b => b.remove());
 
-        // Get unique size strings (e.g., "120GB", "1TB")
+        // Get unique size strings
         const uniqueSizes = [...new Set(list.map(s => s.sizeStr))];
         
-        // Sort sizes logic: GB < TB, then numeric value
+        // Sort: GB first, then TB
         uniqueSizes.sort((a,b) => {
             const getVal = (str) => {
                 let n = parseFloat(str);
@@ -1652,18 +1657,32 @@
 
         uniqueSizes.forEach(size => {
             const btn = document.createElement('button');
-            btn.className = 'filter-btn btn-size-filter'; // Add specific class
-            btn.style.borderColor = 'var(--brand-aux)';
-            btn.style.color = '#ccc';
+            btn.className = 'filter-btn btn-size-filter';
             btn.innerText = size;
-            
-            // Hover effect logic handled by CSS generally, but inline style helps visibility
-            btn.onmouseover = function() { this.style.color = '#fff'; this.style.background = 'var(--brand-aux)'; };
-            btn.onmouseout = function() { this.style.color = '#ccc'; this.style.background = 'transparent'; };
-
             btn.onclick = () => applySizeFilter(type, size);
             container.appendChild(btn);
         });
+    }
+
+    function applySizeFilter(type, sizeStr) {
+        const category = type + 'Names';
+        const containerId = type + 'ListContainer';
+        const container = document.getElementById(containerId);
+        const options = container.querySelectorAll('.multi-option');
+        
+        const fullList = type === 'ssd' ? 
+            Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
+            Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
+
+        const matchingNames = fullList.filter(s => s.sizeStr === sizeStr).map(s => s.name);
+        
+        matchingNames.forEach(name => selectedOptions[category].add(name));
+        
+        options.forEach(opt => {
+            if(matchingNames.includes(opt.dataset.value)) opt.classList.add('selected');
+        });
+
+        updateDisplayLabel(category);
     }
 
     function applySizeFilter(type, sizeStr) {
