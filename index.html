@@ -870,6 +870,12 @@
             border-radius: 4px;
         }
 
+/* Sadece RAM Models dropdown kutusunun yazısını büyütür */
+#multiRam .multi-select-display {
+    font-size: 1.4em; /* İstediğiniz boyutu buraya yazın (Örn: 1.4em) */
+}
+
+
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -1743,7 +1749,7 @@
             if (category === 'ramNames') {
                 const r = DB.ram.get(opt);
                 if (r) {
-                    label = `<span style="font-size:0.9em">${r.name} | Size Each: ${r.size}GB | Total: ${r.totalSize}GB | ${r.type} | ${r.freq}/${r.maxSpeed} MHz | ${r.voltage}/${r.maxVoltage} V | Lvl: ${r.level}</span>`;
+                    label = `<span style="font-size:1.2em">${r.name} | Size Each: ${r.size}GB | Total: ${r.totalSize}GB | ${r.type} | ${r.freq}/${r.maxSpeed} MHz | ${r.voltage}/${r.maxVoltage} V | Lvl: ${r.level}</span>`;
                 }
             } else if (category === 'moboNames') {
                 const m = DB.mobo.get(opt);
