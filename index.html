@@ -1725,6 +1725,7 @@
     function populateMultiSelect(category, options, containerId) {
         const container = document.getElementById(containerId);
         container.innerHTML = '';
+        
         options.forEach((opt, index) => {
             const div = document.createElement('div');
             div.className = 'multi-option';
@@ -1745,11 +1746,11 @@
             } else if (category === 'caseNames') {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
-} else if (category === 'ssdNames' || category === 'hddNames') {
-            const s = DB.storage.get(opt);
-            if (s) {
-                // FIXED: Now displays Size AND Speed specifically
-                label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
+            } else if (category === 'ssdNames' || category === 'hddNames') {
+                const s = DB.storage.get(opt);
+                if (s) {
+                    label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
+                }
             } else {
                 if (category === 'vram') label += ' GB';
                 if (category === 'length') label += ' mm';
@@ -1759,6 +1760,7 @@
             div.onclick = (e) => toggleOption(category, opt, div, e);
             container.appendChild(div);
         });
+        
         updateDisplayLabel(category);
     }
 
