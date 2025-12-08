@@ -2228,7 +2228,7 @@
                     
                     if (ram) {
                         ramCost = ram.price * sticks;
-                        ramWatts = 10 * sticks;
+                        // ramWatts line is deleted (it defaults to 0 from the definition above)
                         const m = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
                         if (m && ram.freq > cpu.defaultMem) {
                             adjScore += ((ram.freq - cpu.defaultMem) * m);
@@ -2295,12 +2295,10 @@
                             if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
                         }
 
-                        let psu = null;
-                        // Storage Wattage Approximation (e.g. 5W per drive)
-                        const storageWatts = finalStorageList.length * 5; 
+let psu = null;
                         
-                        // UPDATED FORMULA: Added extraW variable
-                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + ramWatts + storageWatts + 50 + extraW;
+                        // NEW FORMULA: Pure CPU + GPU + Your Manual Extra Input
+                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
                         
                         if (usePsu) {
                             const found = allPsu.find(p => {
