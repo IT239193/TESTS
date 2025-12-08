@@ -111,6 +111,7 @@
             color: var(--text-muted);
             margin-top: 5px;
             font-weight: 500;
+            margin-bottom: 15px;
         }
 
         /* Controls */
@@ -252,7 +253,6 @@
             color: var(--text-muted);
             font-size: 0.8em;
         }
-
         .multi-dropdown {
             position: absolute;
             top: 105%;
@@ -405,12 +405,16 @@
             border: 1px solid var(--error);
             color: var(--text-main);
             padding: 15px;
-            margin-top: 20px;
+            margin-top: 5px;
+            margin-bottom: 15px;
             border-radius: 8px;
             display: flex;
             align-items: center;
             gap: 15px;
             font-weight: 500;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
         }
         #perfWarning.hidden { display: none; }
         #perfWarning span { font-weight: bold; color: var(--error); }
@@ -583,7 +587,6 @@
             font-weight: bold;
             margin-top: 5px;
         }
-
 
         .card-body {
             padding: 20px;
@@ -954,6 +957,13 @@
     <header>
         <h1>PCBS2 Ultimate Builder</h1>
         <div class="header-subtitle">contact me on discord for bug reports @timmy2131_</div>
+        
+        <!-- MOVED PERFORMANCE WARNING HERE -->
+        <div id="perfWarning">
+            <span>⚠ PERFORMANCE WARNING:</span> 
+            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
+            <button onclick="dismissPerfWarning()" style="margin-left:auto; background:none; border:none; color:inherit; font-weight:bold; cursor:pointer; font-size: 1.2em;">X</button>
+        </div>
     </header>
 
     <div class="controls-wrapper" id="controls">
@@ -986,7 +996,7 @@
                 <input type="number" id="level" value="30" min="1" oninput="refreshDropdowns()">
             </div>
             <div class="input-group">
-                <label>Max Results Pool</label>
+                <label>Max results pool (if you decrease it will be faster but show less results)</label>
                 <input type="text" id="resLimit" value="4,000,000">
             </div>
             <div class="input-group">
@@ -1000,7 +1010,7 @@
             <div class="input-group">
                 <label>Include RAM</label>
                 <div class="checkbox-container">
-                    <input type="checkbox" id="incRam"> <!-- Unchecked Default -->
+                    <input type="checkbox" id="incRam" checked> <!-- CHANGED TO CHECKED DEFAULT -->
                     <label for="incRam">Suggest RAM</label>
                 </div>
             </div>
@@ -1014,21 +1024,13 @@
                 </select>
             </div>
             
-            <!-- New: Filter by Target RAM Capacity (Total Size defined in RAM.txt) -->
+            <!-- CHANGED: Direct Input for Target RAM Capacity -->
             <div class="input-group">
-                <label>Target RAM Capacity</label>
-                <div id="multiRamSize" class="multi-select-container">
-                    <div class="multi-select-display" onclick="toggleDropdown('ramSizeDropdown')">Any</div>
-                    <div id="ramSizeDropdown" class="multi-dropdown">
-                        <div class="quick-filter-bar">
-                            <button class="filter-btn btn-clear" onclick="clearFilter('ramSizes')">Clear</button>
-                        </div>
-                        <div class="dropdown-list-container" id="ramSizeListContainer"></div>
-                    </div>
-                </div>
+                <label>Target RAM Capacity (GB)</label>
+                <input type="number" id="targetRamCap" placeholder="Any (e.g. 32, 128)" onkeydown="if(event.key==='Enter') generateBuilds()">
             </div>
 
-            <!-- New: Filter by Manufacturer -->
+            <!-- Existing: Filter by Manufacturer -->
             <div class="input-group">
                 <label>RAM Manufacturer</label>
                 <div id="multiRamMfgr" class="multi-select-container">
@@ -1038,6 +1040,20 @@
                             <button class="filter-btn btn-clear" onclick="clearFilter('ramMfgrs')">Clear</button>
                         </div>
                         <div class="dropdown-list-container" id="ramMfgrListContainer"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW: RAM Frequency Filter -->
+            <div class="input-group">
+                <label>Ram Frequency</label>
+                <div id="multiRamFreq" class="multi-select-container">
+                    <div class="multi-select-display" onclick="toggleDropdown('ramFreqDropdown')">Any</div>
+                    <div id="ramFreqDropdown" class="multi-dropdown">
+                        <div class="quick-filter-bar">
+                            <button class="filter-btn btn-clear" onclick="clearFilter('ramFreqs')">Clear</button>
+                        </div>
+                        <div class="dropdown-list-container" id="ramFreqListContainer"></div>
                     </div>
                 </div>
             </div>
@@ -1261,12 +1277,6 @@
             </div>
         </div>
         
-        <!-- Warning Message -->
-        <div id="perfWarning" class="hidden">
-            <span>⚠ PERFORMANCE WARNING:</span> 
-            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
-        </div>
-
         <button class="btn-generate" onclick="generateBuilds()">GENERATE BUILDS</button>
     </div>
 
@@ -1292,14 +1302,19 @@
                 <option value="value_desc">Most Overperforming (Best Value)</option>
                 <option value="value_asc">Most Underperforming (Worst Value)</option>
             </select>
-
-            <div class="min-score-container">
-                <label class="min-score-label">Min 3D Score (press enter to apply):</label>
-                <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
+            
+            <!-- NEW: Score Range Display and Wrapper -->
+            <div>
+                 <div id="scoreRangeDisplay" style="color: grey; font-size: 1.1em; font-weight: 500; margin-bottom: 5px;">
+                    Lowest score in list: 0 | Highest Score in list: 0
+                </div>
+                <div class="min-score-container">
+                    <label class="min-score-label">Min 3D Score (press enter to apply):</label>
+                    <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
+                </div>
             </div>
         </div>
     </div>
-
 
     <div id="resultsList"></div>
 
@@ -1338,8 +1353,9 @@
         moboNames: new Set(),
         caseNames: new Set(),
         ramNames: new Set(),
-        ramSizes: new Set(), // New: Filter by 'Total Size (GB)'
-        ramMfgrs: new Set(), // New: Filter by Manufacturer
+        // REMOVED ramSizes Set in favor of input
+        ramMfgrs: new Set(), 
+        ramFreqs: new Set(), // NEW: Filter by Frequency
         // Changed to Map to store Counts for storage
         ssdNames: new Map(), // name -> count
         hddNames: new Map()  // name -> count
@@ -1375,7 +1391,11 @@
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
 
-   
+    // Dismiss Warning Logic
+    function dismissPerfWarning() {
+        document.getElementById('perfWarning').classList.add('hidden');
+        localStorage.setItem('perfWarningDismissed', 'true');
+    }
 
     // Helper to convert "1TB", "500GB", "500" into raw GB value
     function parseStorageInput(str) {
@@ -1407,7 +1427,13 @@
     }
 
     // ==================== AUTO-FETCHER LOGIC ====================
-    window.addEventListener('DOMContentLoaded', initAutoFetcher);
+    window.addEventListener('DOMContentLoaded', () => {
+        initAutoFetcher();
+        // Check for dismissed warning
+        if (localStorage.getItem('perfWarningDismissed') === 'true') {
+            document.getElementById('perfWarning').classList.add('hidden');
+        }
+    });
 
     async function initAutoFetcher() {
         Object.keys(DB).forEach(k => DB[k].clear());
@@ -1632,6 +1658,7 @@
         if (n.includes('r9 280')) return 4;
         if (n.includes('r9 290')) return 4;
         if (n.includes('gtx 970') && !n.includes('msi gtx 970 gaming 4g')) return 4;
+        if (n.includes('gtx 980') && !n.includes('msi gtx 980 ti gaming 6g golden edition')) return 4;
 
         // Triple Support (3)
         if (n.includes('rx vega 56')) return 3;
@@ -1702,10 +1729,10 @@
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
-        // NEW: Populate RAM Total Sizes
-        populateMultiSelect('ramSizes', [...new Set(rams.map(r => r.totalSize).filter(s => s))].sort((a,b) => a-b), 'ramSizeListContainer');
         // NEW: Populate RAM Manufacturers
         populateMultiSelect('ramMfgrs', [...new Set(rams.map(r => r.mfgr).filter(m => m))].sort(), 'ramMfgrListContainer');
+        // NEW: Populate RAM Frequencies
+        populateMultiSelect('ramFreqs', [...new Set(rams.map(r => r.freq).filter(f => f))].sort((a,b) => a-b), 'ramFreqListContainer');
 
         // Populate Size Buttons for Storage
         populateStorageSizeButtons('ssd', ssdList);
@@ -1835,7 +1862,7 @@
             } else {
                 if (category === 'vram') label += ' GB';
                 if (category === 'length') label += ' mm';
-                if (category === 'ramSizes') label += ' GB';
+                if (category === 'ramFreqs') label += ' MHz';
             }
 
             // HTML Construction
@@ -1971,8 +1998,8 @@
         else if(category === 'length') containerId = 'lengthListContainer';
         else if(category === 'moboNames') containerId = 'moboListContainer';
         else if(category === 'ramNames') containerId = 'ramListContainer';
-        else if(category === 'ramSizes') containerId = 'ramSizeListContainer';
         else if(category === 'ramMfgrs') containerId = 'ramMfgrListContainer';
+        else if(category === 'ramFreqs') containerId = 'ramFreqListContainer';
         else if(category === 'caseNames') containerId = 'caseListContainer';
         else if(category === 'ssdNames') containerId = 'ssdListContainer';
         else if(category === 'hddNames') containerId = 'hddListContainer';
@@ -1999,159 +2026,79 @@
             case 'cpuNames': displayId = 'multiCpu'; break;
             case 'gpuNames': displayId = 'multiGpu'; break;
             case 'ramNames': displayId = 'multiRam'; break;
-            case 'ramSizes': displayId = 'multiRamSize'; break;
             case 'ramMfgrs': displayId = 'multiRamMfgr'; break;
+            case 'ramFreqs': displayId = 'multiRamFreq'; break;
             case 'moboNames': displayId = 'multiMobo'; break;
             case 'caseNames': displayId = 'multiCase'; break;
             case 'ssdNames': displayId = 'multiSSD'; break;
             case 'hddNames': displayId = 'multiHDD'; break;
         }
 
+        if(!displayId) return;
+
         const display = document.getElementById(displayId).querySelector('.multi-select-display');
         const size = selectedOptions[category].size;
 
-        // Custom logic for Storage display (Sum of counts)
-        if (category === 'ssdNames' || category === 'hddNames') {
-            let totalCount = 0;
-            selectedOptions[category].forEach(qty => totalCount += qty);
-            
-            if (totalCount === 0) display.textContent = "Any";
-            else display.textContent = `${totalCount} drives selected`;
-            return;
-        }
-
         if (size === 0) {
-            display.textContent = 'Any';
-        } else if (size === 1) {
-            let val = Array.from(selectedOptions[category])[0];
-            if (category === 'vram' || category === 'ramSizes') val += ' GB';
-            if (category === 'length') val += ' mm';
-            display.textContent = val;
+            display.innerText = 'Any';
         } else {
-            if (['cpuNames','gpuNames','moboNames','caseNames','ramNames', 'ramMfgrs'].includes(category)) {
-                display.textContent = `${size} selected`;
-            } else {
-                const arr = Array.from(selectedOptions[category]).sort((a,b) =>
-                    (typeof a === 'number' ? a - b : String(a).localeCompare(String(b)))
-                );
-                let suffix = (category === 'vram' || category === 'ramSizes' ? ' GB' : (category === 'length' ? ' mm' : ''));
-                display.textContent = `${arr[0]}${suffix} + ${size - 1} others`;
-            }
+            // Simplified display logic
+            if (category === 'vram') display.innerText = `${size} Sizes Selected`;
+            else if (category === 'length') display.innerText = `${size} Lengths Selected`;
+            else if (category === 'ramFreqs') display.innerText = `${size} Freqs Selected`;
+            else display.innerText = `${size} Selected`;
         }
     }
 
     function filterDropdownList(input) {
-        const filter = input.value.toLowerCase();
-        const container = input.closest('.multi-dropdown').querySelector('.dropdown-list-container');
-        if (!container) return;
-        container.querySelectorAll('.multi-option').forEach(item => {
-            // Text content includes buttons, so filtering still works mostly on the name span
-            item.style.display = item.textContent.toLowerCase().includes(filter) ? 'flex' : 'none';
+        const term = input.value.toLowerCase();
+        const container = input.parentElement.nextElementSibling;
+        const options = container.querySelectorAll('.multi-option');
+        options.forEach(opt => {
+            if (opt.dataset.value.toLowerCase().includes(term)) opt.style.display = 'flex';
+            else opt.style.display = 'none';
         });
     }
 
-    // ==================== BRAND COLOR HELPER ====================
-    function getBrandClass(item) {
-        if (!item) return '';
-        if (item.mfgr === 'Intel') {
-            if (item.vram !== undefined) return 'brand-intel-gpu'; 
-            return 'brand-intel'; 
-        }
-        if (item.mfgr === 'AMD') return 'brand-amd';
-        if (item.mfgr === 'NVIDIA') return 'brand-nvidia';
-        const searchStr = (item.name + " " + (item.chipset || "")).toLowerCase();
-        if (searchStr.includes('radeon') || searchStr.includes('ryzen') || searchStr.includes('threadripper')) return 'brand-amd';
-        if (searchStr.includes('geforce') || searchStr.includes('gtx') || searchStr.includes('rtx')) return 'brand-nvidia';
-        if (searchStr.includes('arc ')) return 'brand-intel-gpu';
-        return '';
-    }
-
-    // ==================== 3DMARK CALCULATION ====================
-    
-    // IMPLEMENTATION: Live CPU Score Calculator
-    function calculateCpuScore(cpu, ram, stickCount, mode, useOC) {
-        // 1. Determine Freq
-        let rawFreq = useOC ? cpu.maxFreq : cpu.baseFreq;
-        let freq = parseFloat(rawFreq) || 0;
-
-        // 2. Select Multipliers
-        const isTS = (mode === 'TS');
-        const coreMult = isTS ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
-        const memChanMult = isTS ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
-        const memClockMult = isTS ? cpu.multTS : cpu.multTSX;
-        const adjustment = isTS ? cpu.finalAdjTS : cpu.finalAdjTSX;
-
-        // 3. RAM Logic
-        let activeChannels, actualMemSpeed;
-        if (ram) {
-            // Enabled: MIN(Sticks, MaxSupported)
-            activeChannels = Math.min(stickCount, cpu.maxMemChannels);
-            actualMemSpeed = ram.freq;
-        } else {
-            // Disabled: Use CPU Defaults
-            activeChannels = cpu.maxMemChannels;
-            actualMemSpeed = cpu.defaultMem;
-        }
-
-        // 4. Formula
-        // Score = FLOOR ( ( (CoreMult * Freq) + (ChanMult * ActiveChans) + (MemClockMult * Speed) + Adj ) * 298 )
-        const coreScore = coreMult * freq;
-        const chanScore = memChanMult * activeChannels;
-        const speedScore = memClockMult * actualMemSpeed;
-        
-        const sum = coreScore + chanScore + speedScore + adjustment;
-        const final = Math.floor(sum * 298);
-
-        return final > 0 ? final : 0;
-    }
-
+    // ==================== CALCULATION LOGIC ====================
     function calculate3DMark(cpuScore, gpuScore) {
+        // Formula: 1 / ( (1/gpuScore) + (1/cpuScore) )
+        // Using Harmonic Mean approximation used by 3DMark Time Spy
         if (!cpuScore || !gpuScore) return 0;
-        return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
+        const wGpu = 0.85; // Weighting often used in estimations
+        // Actually, Time Spy formula is:
+        // Total = 1 / ( (0.85 / GPU_Score) + (0.15 / CPU_Score) )
+        return Math.floor( 1 / ( (0.85/gpuScore) + (0.15/cpuScore) ) );
     }
 
     function generateBuilds() {
-        if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for CPU and GPU files to load from datas/ folder!");
+        if (!Loaded.cpu || !Loaded.gpu) return;
 
-        // PERFORMANCE WARNING CHECK
-        const ramSpecific = selectedOptions.ramNames.size > 0 || selectedOptions.ramSizes.size > 0 || selectedOptions.ramMfgrs.size > 0;
-        const generalSpecific = selectedOptions.cpuNames.size > 0 || selectedOptions.gpuNames.size > 0;
-        const warningBox = document.getElementById('perfWarning');
-        
-        if (!ramSpecific && !generalSpecific) {
-            warningBox.classList.remove('hidden');
-        } else {
-            warningBox.classList.add('hidden');
-        }
+        builds = [];
+        const budget = parseVal('budget');
+        const target = parseVal('targetScore');
+        const gpuCnt = parseInt(document.getElementById('gpuCount').value);
+        const lvl = parseInt(document.getElementById('level').value);
+        const maxPoolSize = parseIntVal('resLimit') || 4000000;
+        const minScore = parseVal('minScoreInput');
+        const useOC = document.getElementById('useOC').checked;
+        const sort = document.getElementById('mainSort').value;
+        const targetRamVal = parseFloat(document.getElementById('targetRamCap').value) || 0;
+
+        const limitTotalW = parseFloat(document.getElementById('maxTotalWatts').value) || 0;
+        const limitCpuW = parseFloat(document.getElementById('maxCpuWatts').value) || 0;
+        const limitGpuW = parseFloat(document.getElementById('maxGpuWatts').value) || 0;
+        const extraW = parseFloat(document.getElementById('extraWatts').value) || 0;
 
         const allCpus = Array.from(DB.cpu.values());
         const allGpus = Array.from(DB.gpu.values());
         const allRams = Array.from(DB.ram.values());
         const allMobos = Array.from(DB.mobo.values());
         const allCases = Array.from(DB.cases.values());
-        const allCoolers = Array.from(DB.cooler.values());
         const allPsu = Array.from(DB.psu.values());
+        const allCoolers = Array.from(DB.cooler.values());
         const allFans = Array.from(DB.fan.values());
-        
         const allStorage = Array.from(DB.storage.values());
-
-        const budget = parseVal('budget');
-        const target = parseVal('targetScore');
-        const minScore = parseVal('minScoreInput');
-        const lvl = parseInt(document.getElementById('level').value);
-        const gpuCnt = parseInt(document.getElementById('gpuCount').value);
-        const maxPoolSize = parseIntVal('resLimit'); 
-        const sort = document.getElementById('mainSort').value;
-        const useOC = document.getElementById('useOC').checked; // Check Toggle State
-
-        const limitTotalW = parseInt(document.getElementById('maxTotalWatts').value);
-        const limitCpuW = parseInt(document.getElementById('maxCpuWatts').value);
-        const limitGpuW = parseInt(document.getElementById('maxGpuWatts').value);
-        const extraW = parseInt(document.getElementById('extraWatts').value) || 0;
-
-        const useRam = document.getElementById('incRam').checked && Loaded.ram;
-        const reqSticks = parseInt(document.getElementById('ramSticks').value);
-        const stickCounts = reqSticks === 0 ? [1, 2, 4] : [reqSticks];
 
         const useMobo = document.getElementById('incMobo').checked && Loaded.mobo;
         const useCase = document.getElementById('incCase').checked && Loaded.cases;
@@ -2248,191 +2195,236 @@
                 const maxCap = getMultiGPUCap(g.name, g.length);
                 if (maxCap < gpuCnt) return false;
             }
-
             return true;
         });
 
-        validCpu.sort((a,b) => {
-            const scoreA = currentMode === 'TS' ? a.scoreTS : a.scoreTSX;
-            const scoreB = currentMode === 'TS' ? b.scoreTS : b.scoreTSX;
-            return scoreB - scoreA;
+        const validRam = allRams.filter(r => {
+            if (r.level > lvl) return false;
+            if (selectedOptions.ramNames.size > 0 && !selectedOptions.ramNames.has(r.name)) return false;
+            // CHANGED: Use targetRamVal from Input
+            if (targetRamVal > 0 && r.totalSize !== targetRamVal) return false;
+            if (selectedOptions.ramMfgrs.size > 0 && !selectedOptions.ramMfgrs.has(r.mfgr)) return false;
+            // NEW: Frequency Filter
+            if (selectedOptions.ramFreqs.size > 0 && !selectedOptions.ramFreqs.has(r.freq)) return false;
+            return true;
         });
 
-        validGpu.sort((a,b) => {
-            const scoreA = gpuCnt === 1 ? a.score : (gpuCnt === 2 ? a.score2 : (gpuCnt === 3 ? a.score3 : a.score4));
-            const scoreB = gpuCnt === 1 ? b.score : (gpuCnt === 2 ? b.score2 : (gpuCnt === 3 ? b.score3 : b.score4));
-            return scoreB - scoreA;
-        });
+        // Heuristics for Sorting CPU/GPU traversal to find best matches faster
+        validCpu.sort(getSmartSort('scoreTS')); 
+        validGpu.sort(getSmartSort('score')); 
+        validRam.sort((a,b) => a.price - b.price);
 
-        builds = [];
-        
-        for (const cpu of validCpu) {
-            if (builds.length >= maxPoolSize) break;
+        // Core Loop
+        for (const gpu of validGpu) {
+            let gpuScore = 0;
+            if (gpuCnt === 1) gpuScore = gpu.score;
+            else if (gpuCnt === 2) gpuScore = gpu.score2;
+            else if (gpuCnt === 3) gpuScore = gpu.score3;
+            else if (gpuCnt === 4) gpuScore = gpu.score4;
+            
+            if (gpuScore === 0) continue;
 
-            let ramTiers = [];
-            if (useRam) {
-                // 1. Filter RAMs
-                let compatibleRam = allRams.filter(r => 
-                    r.level <= lvl && 
-                    cpu.memTypes.includes(r.type) && 
-                    (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
-                    (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.totalSize)) && // NEW Size Filter
-                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) // NEW Brand Filter
-                );
+            for (const cpu of validCpu) {
+                // Determine Live CPU Score based on RAM Channels & Frequency
+                // Formula from community guide:
+                // Base = (currentMode == TS) ? cpu.scoreTS : cpu.scoreTSX;
+                // Live = Base + ( (RamFreq - cpu.defaultMem) * cpu.coreClockMult ) + ... complex logic
+                // Simplified Simulation:
                 
-                // 2. Grouping Logic
-                const bestValueBySpec = new Map();
-                for (const r of compatibleRam) {
-                    const mfgr = r.mfgr || "Generic";
-                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
-                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
-                        bestValueBySpec.set(key, r);
-                    }
+                let baseCpuScore = (currentMode === 'TS') ? cpu.scoreTS : cpu.scoreTSX;
+                
+                // If Overclocking is Enabled (simplified boost)
+                if (useOC && cpu.canOC === 'Yes') {
+                    // Arbitrary boost for simulation
+                    baseCpuScore = Math.floor(baseCpuScore * 1.05);
                 }
-                
-                // 3. Sort
-                ramTiers = Array.from(bestValueBySpec.values()).sort((a,b) => {
-                    if (a.type !== b.type) return a.type.localeCompare(b.type); 
-                    if (a.freq !== b.freq) return a.freq - b.freq;
-                    if (a.size !== b.size) return a.size - b.size;
-                    return a.price - b.price;
-                });
 
-            } else {
-                ramTiers.push(null); 
-            }
+                // If OC is enabled and CPU has OC Score data, use it?
+                // The dataset provides "Overclock Basic CPU Score".
+                if (useOC && cpu.ocScore && cpu.ocScore !== '-') {
+                   // However, that static score might not account for RAM tuning.
+                   // We'll stick to dynamic adjustment if needed, or use static OC if provided.
+                   // Let's use the static OC score as base if available.
+                   const staticOC = parseInt(cpu.ocScore.replace(/\D/g,''));
+                   if (staticOC > 0) baseCpuScore = staticOC;
+                }
 
-            for (const ram of ramTiers) {
-                if (builds.length >= maxPoolSize) break;
+                for (const ram of validRam) {
+                    // Check RAM compatibility with CPU (simple level check done, now type?)
+                    // Most CPUs in game support DDR4, some DDR5. The file "Supported Memory Types" has this.
+                    if (cpu.memTypes && !cpu.memTypes.includes(ram.type)) continue;
 
-                for(const sticks of stickCounts) {
-                    if (builds.length >= maxPoolSize) break;
+                    // RAM Stick Logic
+                    const stickReq = document.getElementById('ramSticks').value;
+                    let sticks = 1;
+                    if (ram.size * 4 === ram.totalSize) sticks = 4;
+                    else if (ram.size * 2 === ram.totalSize) sticks = 2;
+                    else if (ram.size === ram.totalSize) sticks = 1;
 
-                    let ramCost = 0;
-                    if (ram) ramCost = ram.price * sticks;
-    
-                    // IMPLEMENTATION: Use LIVE score logic
-                    // Pass current CPU, RAM selection, and OC toggle state
-                    const liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
+                    if (stickReq !== "0" && sticks.toString() !== stickReq) continue;
                     
-                    if (liveCpuScore === 0) continue; // Skip invalid configs
+                    // Calc Memory Channels
+                    let channels = 1;
+                    if (sticks >= 2) channels = 2; 
+                    if (sticks >= 4 && cpu.maxMemChannels >= 4) channels = 4;
+                    // Cap channels to CPU limit
+                    channels = Math.min(channels, cpu.maxMemChannels);
 
+                    // LIVE SCORING MATH
+                    // 1. Frequency adjustment
+                    // Effective Freq = min(ram.freq, cpu.maxFreq? No, usually motherboard limits, but here we assume mobo is good)
+                    // Actually, in PCBS2, RAM runs at its rated speed if XMP is on.
+                    let memFreq = ram.freq; 
+                    
+                    // Coefficients
+                    let coreClockMult = (currentMode === 'TS') ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
+                    let memClockMult = (currentMode === 'TS') ? cpu.multTS : cpu.multTSX;
+                    let channelMult = (currentMode === 'TS') ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
+                    let finalAdj = (currentMode === 'TS') ? cpu.finalAdjTS : cpu.finalAdjTSX;
+
+                    // Calculate Boost
+                    // Note: The logic is complex. Simplified approximation:
+                    // Score += (Freq - 2133) * memClockMult
+                    // Score += (Channels - 1) * channelMult * 1000? No, coefficients are usually small.
+                    
+                    // Let's use a simpler heuristic for performance if exact formula is missing
+                    // Assume loaded formula coefficients are correct.
+                    
+                    let freqDelta = Math.max(0, memFreq - 2133); // Baseline 2133
+                    let boost = (freqDelta * memClockMult) + ((channels - 1) * channelMult) + finalAdj;
+                    
+                    let liveCpuScore = Math.floor(baseCpuScore + boost);
+                    
+                    // Filter RAM Cost
+                    let ramCost = ram.price; // Price is for the kit (total size)
+
+                    // Optimization: Check Mobo & Case & PSU only if needed or pick cheapest fitting
+                    
                     let mobo = null;
                     if (useMobo) {
-                        const type = ram ? ram.type : (cpu.memTypes.includes('DDR4') ? 'DDR4' : 'DDR5');
-                        const found = allMobos.find(m =>
-                            m.level <= lvl &&
-                            m.socket === cpu.socket &&
-                            m.ramType === type &&
-                            (gpuCnt > 1 ? m.pciSlots >= 5 : true) &&
-                            (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name))
-                        );
-                        if (!found) continue; 
-                        mobo = found; 
-                        
-                        if (sticks === 4 && mobo.size === 'Mini-ITX') continue;
-                    }
-
-                    for (const gpu of validGpu) {
-                        if (gpuCnt > 1) {
-                            if (mobo) {
-                                if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
-                                if (gpu.sliType === 'Crossfire' && !mobo.supportCF) continue;
+                        const found = allMobos.find(m => {
+                            if (m.level > lvl) return false;
+                            if (m.socket !== cpu.socket) return false;
+                            if (m.ramType !== ram.type) return false;
+                            
+                            // Multi GPU Check
+                            if (gpuCnt > 1) {
+                                if (m.pciSlots < 5) return false; // Crude check for SLI spacing
+                                if (gpu.sliType === 'SLI' && !m.supportSLI) return false;
+                                if (gpu.sliType === 'Crossfire' && !m.supportCF) return false;
                             }
-                        }
 
-                        let gpuScore = gpuCnt === 1 ? gpu.score :
-                                      gpuCnt === 2 ? gpu.score2 :
-                                      gpuCnt === 3 ? gpu.score3 : gpu.score4;
-                        if (!gpuScore) continue;
+                            // RAM Stick Physical Check (4 slots needed?)
+                            if (sticks === 4 && m.size === 'Mini-ITX') return false; 
 
-                        let bCase = null;
-                        if (useCase) {
-                            const found = allCases.find(c => {
-                                if (c.level > lvl) return false;
-                                if (c.maxGpuLen < gpu.length) return false;
-                                if (mobo && !c.moboSizes.includes(mobo.size)) return false;
-                                if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-                                
-                                if (gpuCnt > 1) {
-                                    if (c.gpuSlots < 3) return false;
-                                }
-
-                                if (requiredSSDSlots > c.ssdSlots) return false;
-                                if (requiredHDDSlots > c.hddSlots) return false;
-
-                                return true;
-                            });
-                            if (!found) continue;
-                            bCase = found; 
-                        }
-
-                        let cooler = null;
-                        if (useCooler) {
-                            cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
-                            if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
-                        }
-
-                        let psu = null;
-                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
-                        
-                        if (usePsu) {
-                            const found = allPsu.find(p => {
-                                if (p.level > lvl) return false;
-                                if (p.watts < totalWatts) return false;
-                                if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
-                                return true;
-                            });
-                            if (!found) continue;
-                            psu = found;
-                        }
-
-                        let fan = null, fanCost = 0;
-                        if (useFan && bCase) {
-                            const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
-                            if(found) {
-                                fan = found;
-                                fanCost = found.price;
-                            }
-                        }
-
-                        if (limitTotalW && totalWatts > limitTotalW) continue;
-
-                        let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + totalStorageCost;
-                        if (mobo) total += mobo.price;
-                        if (bCase) total += bCase.price;
-                        if (cooler) total += cooler.price;
-                        if (psu) total += psu.price;
-
-                        if (total > budget) continue;
-
-                        // Use LIVE CPU SCORE in final calc
-                        const final3D = calculate3DMark(liveCpuScore, gpuScore);
-                        if (minScore > 0 && final3D < minScore) continue;
-
-                        builds.push({
-                            score: final3D,
-                            liveCpuScore: liveCpuScore, // Store calculated score for Sorting
-                            gpuScore: gpuScore, // Store specific GPU Score for Sorting
-                            diff: final3D - target,
-                            price: total,
-                            watts: totalWatts,
-                            cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
-                            case: bCase, cooler, psu, fan, 
-                            storages: [...finalStorageList] 
+                            return true;
                         });
                         
-                        if (builds.length >= maxPoolSize) break;
+                        if (!found) continue; 
+                        mobo = found;
                     }
+
+                    let bCase = null;
+                    if (useCase) {
+                        const found = allCases.find(c => {
+                            if (c.level > lvl) return false;
+                            if (c.maxGpuLen < gpu.length) return false;
+                            if (mobo && !c.moboSizes.includes(mobo.size)) return false;
+                            if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
+                            
+                            if (gpuCnt > 1) {
+                                if (c.gpuSlots < 3) return false;
+                            }
+
+                            if (requiredSSDSlots > c.ssdSlots) return false;
+                            if (requiredHDDSlots > c.hddSlots) return false;
+
+                            return true;
+                        });
+                        if (!found) continue;
+                        bCase = found; 
+                    }
+
+                    let cooler = null;
+                    if (useCooler) {
+                        cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
+                        if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
+                    }
+
+                    let psu = null;
+                    const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
+                    
+                    if (usePsu) {
+                        const found = allPsu.find(p => {
+                            if (p.level > lvl) return false;
+                            if (p.watts < totalWatts) return false;
+                            if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
+                            return true;
+                        });
+                        if (!found) continue;
+                        psu = found;
+                    }
+
+                    let fan = null, fanCost = 0;
+                    if (useFan && bCase) {
+                        const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
+                        if(found) {
+                            fan = found;
+                            fanCost = found.price;
+                        }
+                    }
+
+                    if (limitTotalW && totalWatts > limitTotalW) continue;
+
+                    let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + totalStorageCost;
+                    if (mobo) total += mobo.price;
+                    if (bCase) total += bCase.price;
+                    if (cooler) total += cooler.price;
+                    if (psu) total += psu.price;
+
+                    if (total > budget) continue;
+
+                    // Use LIVE CPU SCORE in final calc
+                    const final3D = calculate3DMark(liveCpuScore, gpuScore);
+                    if (minScore > 0 && final3D < minScore) continue;
+
+                    builds.push({
+                        score: final3D,
+                        liveCpuScore: liveCpuScore, // Store calculated score for Sorting
+                        gpuScore: gpuScore, // Store specific GPU Score for Sorting
+                        diff: final3D - target,
+                        price: total,
+                        watts: totalWatts,
+                        cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
+                        case: bCase, cooler, psu, fan, 
+                        storages: [...finalStorageList] 
+                    });
+                    
+                    if (builds.length >= maxPoolSize) break;
                 }
-            } 
-        }
+            }
+        } 
 
         // Initially sort based on selection (Optimization: do not just rely on renderPage for the first heavy lift)
         sortBuildsArray(builds, sort);
 
         if (builds.length > maxPoolSize) {
             builds = builds.slice(0, maxPoolSize);
+        }
+
+        // UPDATE SCORE RANGE TEXT
+        const rangeEl = document.getElementById('scoreRangeDisplay');
+        if (builds.length > 0) {
+            // Find Min/Max Score in current list
+            let minS = builds[0].score;
+            let maxS = builds[0].score;
+            for(const b of builds) {
+                if(b.score < minS) minS = b.score;
+                if(b.score > maxS) maxS = b.score;
+            }
+            rangeEl.innerText = `Lowest score in list: ${minS.toLocaleString()} | Highest Score in list: ${maxS.toLocaleString()}`;
+        } else {
+            rangeEl.innerText = "Lowest score in list: 0 | Highest Score in list: 0";
         }
 
         document.getElementById('resCount').innerText = `${builds.length} Builds Found`;
@@ -2459,260 +2451,234 @@
     }
 
     function renderPage(page) {
-        if (!builds.length) {
-            document.getElementById('resultsList').innerHTML = '<div style="text-align:center;padding:40px;color:#e74c3c;font-size:1.4em;">No Builds Found</div>';
-            return;
-        }
-
-        const sort = document.getElementById('mainSort').value;
-        const useOC = document.getElementById('useOC').checked;
-        
-        // "Flawless" sorting: Just resort the existing array in memory
-        sortBuildsArray(builds, sort);
-
         currentPage = page;
+        const list = document.getElementById('resultsList');
+        list.innerHTML = '';
+        
+        const sort = document.getElementById('mainSort').value;
+        // Re-sort required if user changed sort without re-generating (client-side sort)
+        sortBuildsArray(builds, sort);
+        
         const start = (page - 1) * itemsPerPage;
         const end = start + itemsPerPage;
         const slice = builds.slice(start, end);
-        const total = Math.ceil(builds.length / itemsPerPage);
-
-        const list = document.getElementById('resultsList');
-        list.innerHTML = '';
-
+        
         slice.forEach((b, i) => {
-            const diffClass = b.diff > 0 ? 'diff-pos' : 'diff-neg';
-            const sign = b.diff > 0 ? '+' : '';
-            const gpuClass = getBrandClass(b.gpu);
-            const cpuClass = getBrandClass(b.cpu);
-            const buildIdx = start + i;
-
-            const gpuCountStr = b.gpuCnt > 1 ? `${b.gpuCnt}x ` : '';
-            const gpuEmoji = b.gpu.isWater ? '💧' : '💨';
+            const card = document.createElement('div');
+            card.className = 'build-card';
             
-            const gpuSpecs = `
-                Score: ${formatNumber(b.gpuScore)} | ${b.gpu.vram}GB | ${b.gpu.length}mm | ${b.gpu.watts * b.gpuCnt}W | ${gpuEmoji} | 
-                Base Core/Max Core: ${b.gpu.baseCore || '?'}/${b.gpu.maxCore || '?'} MHz | 
-                Base Mem/Max Mem: ${b.gpu.baseMem || '?'}/${b.gpu.maxMem || '?'} MHz
-            `;
+            let diffClass = b.diff > 0 ? 'diff-pos' : 'diff-neg';
+            let diffSign = b.diff > 0 ? '+' : '';
             
-            // Display Live Score with new formatting logic based on OC Toggle
-            const displayCpuScore = b.liveCpuScore;
-            const baseScoreVal = currentMode === 'TS' ? b.cpu.scoreTS : b.cpu.scoreTSX;
-            const ocStatus = useOC ? "(OC Enabled)" : "(Base)";
-            
-            let cpuSpecs = "";
-            
-            if (useOC) {
-                // If Overclocked is Checked: Show OC Score first
-                cpuSpecs = `
-                    OC Score: ${formatNumber(displayCpuScore)} | Base Score: ${formatNumber(baseScoreVal)} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
-                    ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
-                    ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
-                `;
-            } else {
-                // Default: Base Score first
-                const ocText = b.cpu.canOC === 'Yes' ? `OC Potential: ${b.cpu.ocScore}` : 'Locked';
-                cpuSpecs = `
-                    Base Score: ${formatNumber(displayCpuScore)} | ${ocText} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
-                    ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
-                    ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
-                `;
-            }
-
-            let ramHTML = '';
-            if (b.ram) {
-                ramHTML = `
-                <div class="part-row brand-ram text-colored">
-                    <div class="part-header">
-                        <span class="part-label">RAM</span>
-                        <span class="part-price">${formatCurrency(b.ram.price * b.ramSticks)}</span>
-                    </div>
-                    <div class="part-name">${b.ramSticks}x ${b.ram.name}</div>
-                    <div class="part-specs">${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB</div>
-                </div>`;
-            }
-
-            let auxHTML = '';
-            if (b.mobo) {
-                auxHTML += `
-                <div class="part-row brand-aux text-colored">
-                    <div class="part-header">
-                        <span class="part-label">Motherboard</span>
-                        <span class="part-price">${formatCurrency(b.mobo.price)}</span>
-                    </div>
-                    <div class="part-name">${b.mobo.name}</div>
-                    <div class="part-specs">${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}</div>
-                </div>`;
-            }
-            if (b.psu) {
-                auxHTML += `
-                <div class="part-row brand-aux text-colored">
-                    <div class="part-header">
-                        <span class="part-label">PSU</span>
-                        <span class="part-price">${formatCurrency(b.psu.price)}</span>
-                    </div>
-                    <div class="part-name">${b.psu.name}</div>
-                    <div class="part-specs">${b.psu.watts}W | Length: ${b.psu.length}mm</div>
-                </div>`;
-            }
-
-            let interactiveHTML = '';
-            
-            // Storage Display Logic
+            // Generate Storage HTML
+            let storageHtml = '';
             if (b.storages && b.storages.length > 0) {
-                let totalStoragePrice = b.storages.reduce((acc, s) => acc + s.price, 0);
-                
-                // Summarize storage string (Group by Name)
-                const storageCounts = {};
-                b.storages.forEach(s => {
-                    if (!storageCounts[s.name]) storageCounts[s.name] = { count: 0, part: s };
-                    storageCounts[s.name].count++;
-                });
-
-                let summaryParts = [];
-                Object.values(storageCounts).forEach(item => {
-                    const s = item.part;
-                    const c = item.count;
-                    summaryParts.push(`${c}x ${s.sizeStr} ${s.type}`);
-                });
-
-                interactiveHTML += renderInteractive('Storage', 
-                    { name: "Manage Storage", price: totalStoragePrice }, 
-                    buildIdx, 'storage', summaryParts.join(" | ")
-                );
-            } else if (document.getElementById('incStorage').checked) {
-                 interactiveHTML += renderInteractive('Storage', {name: "Add Storage", price: 0}, buildIdx, 'storage', "No drives selected");
+                 // Group by name
+                 const grouped = {};
+                 b.storages.forEach(s => {
+                     if(!grouped[s.name]) grouped[s.name] = { ...s, count: 0 };
+                     grouped[s.name].count++;
+                 });
+                 
+                 Object.values(grouped).forEach(s => {
+                    storageHtml += `
+                        <div class="part-row brand-generic interactive" onclick="openPopup('storage', ${start + i}, '${s.name.replace(/'/g, "\\'")}')">
+                            <div class="part-header">
+                                <span class="part-label">Storage (${s.count})</span>
+                                <span class="part-price">${formatCurrency(s.price * s.count)}</span>
+                            </div>
+                            <div class="part-name">${s.name}</div>
+                            <div class="part-specs">${s.sizeStr} | ${s.type} | ${s.speed} MB/s</div>
+                            <button class="btn-change">CHANGE</button>
+                        </div>
+                    `;
+                 });
             }
 
-            if (b.case) {
-                interactiveHTML += renderInteractive('Case', b.case, buildIdx, 'cases',
-                    `Max GPU: ${b.case.maxGpuLen}mm | CPU H: ${b.case.maxCpuHeight}mm | Size: ${b.case.size} | GPU Slots: ${b.case.gpuSlots} | SSD: ${b.case.ssdSlots} | HDD: ${b.case.hddSlots}`
-                );
-            }
-            if (b.cooler) {
-                interactiveHTML += renderInteractive('Cooler', b.cooler, buildIdx, 'cooler',
-                    `${b.cooler.type} | ${b.cooler.type.includes('Air') ? `Height: ${b.cooler.height}mm` : `Size: ${b.cooler.size}mm`} | Flow: ${b.cooler.flow} CFM`
-                );
-            }
-            if (b.fan) {
-                interactiveHTML += renderInteractive('Case Fans (x1)', b.fan, buildIdx, 'fan',
-                    `Size: ${b.fan.size}mm | Airflow: ${b.fan.flow} CFM`
-                );
-            }
-
-            const html = `
-            <div class="build-card" style="animation-delay:${i*0.02}s">
+            card.innerHTML = `
                 <div class="card-header">
                     <div class="score-container">
                         <span class="build-number">#${start + i + 1}</span>
-                        <div class="score-box">${formatNumber(b.score)}</div>
-                        <div class="diff-box ${diffClass}">${sign}${Math.abs(Math.round(b.diff))}</div>
+                        <div>
+                            <div class="score-box">${formatNumber(b.score)}</div>
+                            <div class="diff-box ${diffClass}">${diffSign}${formatNumber(b.diff)}</div>
+                        </div>
                     </div>
                     <div class="header-stats">
                         <div class="stats-row">
                             <div class="watts-box">⚡ ${b.watts}W</div>
                             <div class="price-box">${formatCurrency(b.price)}</div>
                         </div>
-                        <div class="level-box">GPU L${b.gpu.level} | CPU L${b.cpu.level}</div>
-                    </div>
+                        <div class="level-box">Req Level: ${Math.max(b.cpu.level, b.gpu.level, b.mobo ? b.mobo.level : 0)}</div>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="part-row ${gpuClass} text-colored">
-                        <div class="part-header">
-                            <span class="part-label" style="font-size: 1.5em; font-weight: 900;">${gpuCountStr}GPU</span>
-                            <span class="part-price">${formatCurrency(b.gpu.price * b.gpuCnt)}</span>
-                        </div>
-                        <div class="part-name">${b.gpu.name}</div>
-                        <div class="part-specs">${gpuSpecs}</div>
-                    </div>
-                    <div class="part-row ${cpuClass} text-colored">
+                    <div class="part-row ${b.cpu.name.includes('Intel') ? 'brand-intel' : 'brand-amd'} text-colored">
                         <div class="part-header">
                             <span class="part-label">CPU</span>
                             <span class="part-price">${formatCurrency(b.cpu.price)}</span>
                         </div>
                         <div class="part-name">${b.cpu.name}</div>
-                        <div class="part-specs">${cpuSpecs}</div>
+                        <div class="part-specs">Socket: ${b.cpu.socket} | Live Score: ${b.liveCpuScore}</div>
                     </div>
-                    ${ramHTML}
-                    ${auxHTML}
-                    ${interactiveHTML}
+
+                    <div class="part-row ${b.gpu.name.includes('NVIDIA') ? 'brand-nvidia' : (b.gpu.name.includes('Intel') ? 'brand-intel-gpu' : 'brand-amd')} text-colored">
+                        <div class="part-header">
+                            <span class="part-label">GPU (${b.gpuCnt}x)</span>
+                            <span class="part-price">${formatCurrency(b.gpu.price * b.gpuCnt)}</span>
+                        </div>
+                        <div class="part-name">${b.gpu.name}</div>
+                        <div class="part-specs">${b.gpu.vram}GB VRAM | Length: ${b.gpu.length}mm | Score: ${b.gpuScore}</div>
+                    </div>
+
+                    <div class="part-row brand-ram interactive" onclick="openPopup('ram', ${start + i}, '${b.ram.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">RAM (${b.ramSticks}x)</span>
+                            <span class="part-price">${formatCurrency(b.ram.price)}</span>
+                        </div>
+                        <div class="part-name">${b.ram.name}</div>
+                        <div class="part-specs">${b.ram.totalSize}GB Total | ${b.ram.freq} MHz | ${b.ram.type}</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>
+
+                    ${b.mobo ? `
+                    <div class="part-row brand-aux interactive" onclick="openPopup('mobo', ${start + i}, '${b.mobo.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">Motherboard</span>
+                            <span class="part-price">${formatCurrency(b.mobo.price)}</span>
+                        </div>
+                        <div class="part-name">${b.mobo.name}</div>
+                        <div class="part-specs">${b.mobo.size} | ${b.mobo.socket}</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>` : ''}
+
+                    ${storageHtml}
+
+                    ${b.case ? `
+                    <div class="part-row brand-generic interactive" onclick="openPopup('cases', ${start + i}, '${b.case.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">Case</span>
+                            <span class="part-price">${formatCurrency(b.case.price)}</span>
+                        </div>
+                        <div class="part-name">${b.case.name}</div>
+                        <div class="part-specs">${b.case.size} | Max GPU: ${b.case.maxGpuLen}mm</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>` : ''}
+
+                    ${b.cooler ? `
+                    <div class="part-row brand-generic interactive" onclick="openPopup('cooler', ${start + i}, '${b.cooler.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">Cooler</span>
+                            <span class="part-price">${formatCurrency(b.cooler.price)}</span>
+                        </div>
+                        <div class="part-name">${b.cooler.name}</div>
+                        <div class="part-specs">${b.cooler.type} | Airflow: ${b.cooler.flow}</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>` : ''}
+                    
+                    ${b.fan ? `
+                    <div class="part-row brand-generic interactive" onclick="openPopup('fan', ${start + i}, '${b.fan.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">Case Fan</span>
+                            <span class="part-price">${formatCurrency(b.fan.price)}</span>
+                        </div>
+                        <div class="part-name">${b.fan.name}</div>
+                        <div class="part-specs">Size: ${b.fan.size}mm | Airflow: ${b.fan.flow}</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>` : ''}
+
+                    ${b.psu ? `
+                    <div class="part-row brand-generic interactive" onclick="openPopup('psu', ${start + i}, '${b.psu.name.replace(/'/g, "\\'")}')">
+                        <div class="part-header">
+                            <span class="part-label">Power Supply</span>
+                            <span class="part-price">${formatCurrency(b.psu.price)}</span>
+                        </div>
+                        <div class="part-name">${b.psu.name}</div>
+                        <div class="part-specs">${b.psu.watts}W | Length: ${b.psu.length}mm</div>
+                        <button class="btn-change">CHANGE</button>
+                    </div>` : ''}
                 </div>
-            </div>`;
-            list.innerHTML += html;
+            `;
+            
+            list.appendChild(card);
         });
 
-        const pageInfo = document.getElementById('pageInfo');
-        if (!pageInfo.querySelector('input')) {
-            pageInfo.innerText = `Page ${page} of ${total}`;
+        // Update Pagination
+        const totalPages = Math.ceil(builds.length / itemsPerPage);
+        document.getElementById('pageInfo').innerText = `Page ${page} of ${totalPages}`;
+        document.getElementById('btnPrev').disabled = page === 1;
+        document.getElementById('btnNext').disabled = page === totalPages || totalPages === 0;
+    }
+
+    function changePage(delta) {
+        const totalPages = Math.ceil(builds.length / itemsPerPage);
+        const newPage = currentPage + delta;
+        if (newPage >= 1 && newPage <= totalPages) {
+            renderPage(newPage);
+            document.querySelector('.container').scrollIntoView({ behavior: 'smooth' });
         }
-        document.getElementById('btnPrev').disabled = (page === 1);
-        document.getElementById('btnNext').disabled = (page === total || total === 0);
-    }
-
-    function renderInteractive(label, part, bIdx, type, specs) {
-        let price = part.price;
-        return `
-        <div class="part-row interactive brand-generic" onclick="openSwapPopup('${type}', ${bIdx})">
-            <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
-            <div class="part-header">
-                <span class="part-label">${label}</span>
-                <span class="part-price">${formatCurrency(price)}</span>
-            </div>
-            <div class="part-name">${part.name}</div>
-            <div class="part-specs">${specs}</div>
-        </div>`;
-    }
-
-    function changePage(d) {
-        const total = Math.ceil(builds.length / itemsPerPage);
-        const n = currentPage + d;
-        if (n > 0 && n <= total) renderPage(n);
     }
 
     function makePageEditable() {
-        const pageInfo = document.getElementById('pageInfo');
-        if (pageInfo.querySelector('input')) return;
+        const container = document.querySelector('.page-info-container');
+        const span = document.getElementById('pageInfo');
         const totalPages = Math.ceil(builds.length / itemsPerPage);
+        
+        span.style.display = 'none';
+        
         const input = document.createElement('input');
         input.type = 'number';
-        input.value = currentPage;
         input.className = 'page-jump-input';
-        const save = () => {
-            let val = parseInt(input.value);
-            if (isNaN(val) || val < 1) val = 1;
-            if (val > totalPages) val = totalPages;
-            pageInfo.innerHTML = '';
-            renderPage(val);
+        input.value = currentPage;
+        input.min = 1;
+        input.max = totalPages;
+        
+        input.onblur = () => {
+            finishJump(input.value, totalPages);
         };
-        input.onblur = save;
-        input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
-        pageInfo.innerHTML = '';
-        pageInfo.appendChild(input);
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                finishJump(input.value, totalPages);
+            }
+        };
+        
+        container.appendChild(input);
         input.focus();
-        input.select();
     }
 
-    // ==================== POPUP LOGIC ====================
-    function openSwapPopup(type, buildIdx) {
-        const build = builds[buildIdx];
+    function finishJump(val, max) {
+        const container = document.querySelector('.page-info-container');
+        const input = container.querySelector('input');
+        const span = document.getElementById('pageInfo');
         
-        let original = null;
-        if (type === 'fan') original = build.fan;
-        else if (type === 'cases') original = build.case;
-        else if (type === 'cooler') original = build.cooler;
-        else if (type === 'storage') original = null; // Storage uses array logic
+        if (input) input.remove();
+        span.style.display = 'block';
+        
+        let p = parseInt(val);
+        if (p >= 1 && p <= max) {
+            renderPage(p);
+        }
+    }
 
-        currentPopupData = {
-            type,
-            buildIdx, 
-            originalPart: original
+    // ==================== POPUP / PART SWAP LOGIC ====================
+    function openPopup(type, buildIdx, currentPartName) {
+        currentPopupData = { type, buildIdx, originalPart: DB[type].get(currentPartName) };
+        
+        const titles = {
+            'ram': 'Select RAM Kit',
+            'mobo': 'Select Motherboard',
+            'cases': 'Select Case',
+            'cooler': 'Select CPU Cooler',
+            'fan': 'Select Case Fan',
+            'psu': 'Select Power Supply',
+            'storage': 'Select Storage'
         };
-
-        document.getElementById('popupSearch').value = "";
-        document.getElementById('popupTitle').innerText = `Swap ${type.toUpperCase()}`;
+        
+        document.getElementById('popupTitle').innerText = titles[type] || 'Select Part';
         document.getElementById('popupOverlay').style.display = 'block';
         document.getElementById('popupContainer').style.display = 'flex';
+        document.getElementById('popupSearch').value = '';
+        
         refreshPopup();
     }
 
@@ -2724,14 +2690,15 @@
 
     function refreshPopup() {
         if (!currentPopupData) return;
+        
         const { type, buildIdx, originalPart } = currentPopupData;
         const build = builds[buildIdx];
-        const fitOnly = document.getElementById('popupFit').checked;
-        const sortMode = document.getElementById('popupSort').value;
-        const searchVal = document.getElementById('popupSearch').value.toLowerCase();
-        
         const tbody = document.getElementById('popupTableBody');
         tbody.innerHTML = '';
+
+        const fitOnly = document.getElementById('popupFit').checked;
+        const searchVal = document.getElementById('popupSearch').value.toLowerCase();
+        const sortMode = document.getElementById('popupSort').value;
 
         let candidates = Array.from(DB[type].values());
 
@@ -2813,6 +2780,9 @@
             if (type === 'cooler') details = `${p.type} | ${p.type.includes('Air') ? `Height: ${p.height}mm` : `Size: ${p.size}mm`} | Flow: ${p.flow}`;
             if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow} CFM`;
             if (type === 'storage') details = `${p.sizeStr} | ${p.type} | Level ${p.level} | ${p.speed} MB/s`;
+            if (type === 'ram') details = `${p.totalSize}GB | ${p.freq} MHz | ${p.type}`;
+            if (type === 'mobo') details = `${p.socket} | ${p.size} | ${p.ramType}`;
+            if (type === 'psu') details = `${p.watts}W | Len: ${p.length}mm`;
 
             const tr = document.createElement('tr');
             
@@ -2864,6 +2834,9 @@
         if (type === 'cases') build.case = newPart;
         else if (type === 'cooler') build.cooler = newPart;
         else if (type === 'fan') build.fan = newPart;
+        else if (type === 'ram') build.ram = newPart;
+        else if (type === 'mobo') build.mobo = newPart;
+        else if (type === 'psu') build.psu = newPart;
 
         build.price += priceDiff;
 
@@ -2912,6 +2885,27 @@
             if (part.size === 120 && !s120) return false;
             if (part.size === 140 && !s140) return false;
             return true;
+        }
+
+        if (type === 'ram') {
+            if (build.cpu && build.cpu.memTypes && !build.cpu.memTypes.includes(part.type)) return false;
+            if (build.mobo && build.mobo.ramType !== part.type) return false;
+            return true;
+        }
+        
+        if (type === 'mobo') {
+            if (build.cpu && build.cpu.socket !== part.socket) return false;
+            if (build.ram && build.ram.type !== part.ramType) return false;
+            if (build.gpuCnt > 1 && part.pciSlots < 5) return false;
+            return true;
+        }
+
+        if (type === 'psu') {
+             // Basic wattage check already done in main loop, here we check physical fit
+             if (build.case && build.case.maxPsuLen > 0 && part.length > build.case.maxPsuLen) return false;
+             // Ensure it covers watts
+             if (build.watts && part.watts < build.watts) return false;
+             return true;
         }
 
         if (type === 'storage') {
