@@ -1369,15 +1369,7 @@
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
 
-    function toggleCompactMode() {
-        const isCompact = document.getElementById('compactMode').checked;
-        const list = document.getElementById('resultsList');
-        if (isCompact) {
-            list.classList.add('compact-mode');
-        } else {
-            list.classList.remove('compact-mode');
-        }
-    }
+   
 
     // Helper to convert "1TB", "500GB", "500" into raw GB value
     function parseStorageInput(str) {
