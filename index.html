@@ -1751,12 +1751,14 @@
         
         // === CUSTOM RENDERER FOR STORAGE (SSD/HDD) ===
         if (category === 'ssdNames' || category === 'hddNames') {
-            options.forEach((item, index) => {
+            options.forEach((opt, index) => {
+                // Fix: 'opt' is just the Name string. We need the object.
+                const item = DB.storage.get(opt);
+                if (!item) return; // Safety check
+
                 const div = document.createElement('div');
                 div.className = 'multi-option';
                 div.dataset.value = item.name;
-                
-                // IMPORTANT: This line allows the filter buttons to work
                 div.dataset.sizeStr = item.sizeStr; 
                 
                 const count = manualStorage.get(item.name) || 0;
@@ -1774,13 +1776,46 @@
                 `;
 
                 div.innerHTML = label + qtyUI;
-                // Stop click propagation so clicking the row doesn't close dropdown or conflict
                 div.onclick = (e) => e.stopPropagation(); 
                 container.appendChild(div);
             });
             updateDisplayLabel(category);
             return;
         }
+
+        // === STANDARD RENDERER (CPU, GPU, etc) ===
+        options.forEach((opt, index) => {
+            const div = document.createElement('div');
+            div.className = 'multi-option';
+            if (selectedOptions[category].has(opt)) div.classList.add('selected');
+            div.dataset.value = opt;
+            div.dataset.index = index; 
+            
+            let label = opt;
+            
+            if (category === 'ramNames') {
+                const r = DB.ram.get(opt);
+                if (r) {
+                    label = `<span style="font-size:0.9em">${r.name} | ${r.totalSize}GB | ${r.type} | ${r.freq} MHz</span>`;
+                }
+            } else if (category === 'moboNames') {
+                const m = DB.mobo.get(opt);
+                if (m) label = `<span style="font-size:0.9em">${m.name} | PCI Slots: ${m.pciSlots}</span>`;
+            } else if (category === 'caseNames') {
+                const c = DB.cases.get(opt);
+                if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
+            } else {
+                if (category === 'vram') label += ' GB';
+                if (category === 'length') label += ' mm';
+            }
+
+            div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
+            div.onclick = (e) => toggleOption(category, opt, div, e);
+            container.appendChild(div);
+        });
+        
+        updateDisplayLabel(category);
+    }
 
         // === STANDARD RENDERER (CPU, GPU, etc) ===
         options.forEach((opt, index) => {
