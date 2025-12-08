@@ -1749,24 +1749,29 @@
         const container = document.getElementById(containerId);
         container.innerHTML = '';
         
-        // === CUSTOM RENDERER FOR STORAGE (SSD/HDD) ===
-        if (category === 'ssdNames' || category === 'hddNames') {
+        // Check if we are dealing with Storage
+        const isStorage = (category === 'ssdNames' || category === 'hddNames');
+
+        if (isStorage) {
+            // ============================================
+            // 1. STORAGE RENDERER (Uses +, -, and quantity)
+            // ============================================
             options.forEach((opt, index) => {
-                // Fix: 'opt' is just the Name string. We need the object.
-                const item = DB.storage.get(opt);
-                if (!item) return; // Safety check
+                // Convert string name back to Object to get details
+                const item = DB.storage.get(opt); 
+                if (!item) return; 
 
                 const div = document.createElement('div');
                 div.className = 'multi-option';
                 div.dataset.value = item.name;
-                div.dataset.sizeStr = item.sizeStr; 
+                div.dataset.sizeStr = item.sizeStr; // Used for size filtering
                 
                 const count = manualStorage.get(item.name) || 0;
                 if(count > 0) div.classList.add('selected');
 
                 const label = `<span style="font-size:0.9em; flex:1;">${item.name} | ${item.sizeStr} | ${item.speed} MB/s</span>`;
 
-                // Quantity UI
+                // Quantity Buttons UI
                 const qtyUI = `
                     <div class="qty-controls">
                          <span class="qty-val" id="qty_${index}_${category}" style="${count===0?'display:none':''}">${count}</span>
@@ -1776,12 +1781,47 @@
                 `;
 
                 div.innerHTML = label + qtyUI;
+                
+                // Prevent clicking the row from triggering standard toggle
                 div.onclick = (e) => e.stopPropagation(); 
                 container.appendChild(div);
             });
-            updateDisplayLabel(category);
-            return;
+
+        } else {
+            // ============================================
+            // 2. STANDARD RENDERER (Uses Checkboxes)
+            // ============================================
+            options.forEach((opt, index) => {
+                const div = document.createElement('div');
+                div.className = 'multi-option';
+                if (selectedOptions[category].has(opt)) div.classList.add('selected');
+                div.dataset.value = opt;
+                div.dataset.index = index; 
+                
+                let label = opt;
+                
+                if (category === 'ramNames') {
+                    const r = DB.ram.get(opt);
+                    if (r) label = `<span style="font-size:0.9em">${r.name} | ${r.totalSize}GB | ${r.type} | ${r.freq} MHz</span>`;
+                } else if (category === 'moboNames') {
+                    const m = DB.mobo.get(opt);
+                    if (m) label = `<span style="font-size:0.9em">${m.name} | PCI Slots: ${m.pciSlots}</span>`;
+                } else if (category === 'caseNames') {
+                    const c = DB.cases.get(opt);
+                    if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
+                } else {
+                    if (category === 'vram') label += ' GB';
+                    if (category === 'length') label += ' mm';
+                }
+
+                div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
+                div.onclick = (e) => toggleOption(category, opt, div, e);
+                container.appendChild(div);
+            });
         }
+        
+        updateDisplayLabel(category);
+    }
 
         // === STANDARD RENDERER (CPU, GPU, etc) ===
         options.forEach((opt, index) => {
