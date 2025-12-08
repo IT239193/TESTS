@@ -1,14 +1,4 @@
-Here is the full code with the requested changes applied exactly as described.
 
-**Summary of Changes:**
-1.  **Target RAM Capacity:** Replaced the multi-select dropdown with a simple Input box. You can type a number (e.g., 128), and it filters RAM based on `Total Size`. If left empty, it ignores the filter.
-2.  **Performance Warning:** Moved to the top (under the header), added a Close (X) button. Added logic so that once you close it, it sets a flag and will not reappear for the session.
-3.  **RAM Suggestions:** `Suggest RAM` checkbox is now **Checked** by default.
-4.  **RAM Frequency:** Added a new Multi-select dropdown for "Ram Frequency" next to Manufacturer. It populates based on the fetched RAM data.
-5.  **Max Results Pool Label:** Updated the text to include the performance note.
-6.  **Score Range Display:** Added the Grey, Weight 500 text above the Min 3D Score input. It dynamically updates to show "Lowest score in list: Y | Highest Score in list: Z" whenever builds are generated.
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2997,4 +2987,4 @@ Here is the full code with the requested changes applied exactly as described.
 </script>
 </body>
 </html>
-```
+
