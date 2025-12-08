@@ -1704,34 +1704,26 @@
     }
 
     function applySizeFilter(type, sizeStr) {
-        // Logic for filters (Adds to selection)
-        // With the quantity update, maybe this just adds 1 of each fitting? 
-        // Or behaves like a filter? The user requested adding specific quantities.
-        // I will make the filter button add 1 of every drive that matches that size.
-        // Actually, that might be too many. Let's make it act as a "Add 1 of the best matching"
-        // or just highlight them?
-        // Let's make it add 1 of each to the map.
+        // 1. Identify which dropdown list we are looking at
+        const containerId = type + 'ListContainer';
+        const container = document.getElementById(containerId);
+        const options = container.querySelectorAll('.multi-option');
         
-        const category = type + 'Names';
-        const fullList = type === 'ssd' ? 
-            Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
-            Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
-
-        const matchingNames = fullList.filter(s => s.sizeStr === sizeStr).map(s => s.name);
-        
-        matchingNames.forEach(name => {
-             // If not selected, select 1
-             if (!selectedOptions[category].has(name)) {
-                 selectedOptions[category].set(name, 1);
-             }
+        // 2. Loop through every item in that list
+        options.forEach(opt => {
+            // Read the size string we saved in populateMultiSelect
+            const val = opt.dataset.sizeStr; 
+            
+            // 3. If it matches, show it. If not, hide it.
+            if(val === sizeStr) {
+                opt.style.display = 'flex';
+            } else {
+                opt.style.display = 'none';
+            }
         });
-        
-        // Re-render the dropdown to show counts
-        const listContainerId = type + 'ListContainer';
-        if(category === 'ssdNames') populateMultiSelect(category, Array.from(DB.storage.values()).filter(s=>(s.type==='SSD'||s.type==='M.2')).map(s=>s.name).sort(), listContainerId);
-        else populateMultiSelect(category, Array.from(DB.storage.values()).filter(s=>s.type==='HDD').map(s=>s.name).sort(), listContainerId);
 
-        updateDisplayLabel(category);
+        // 4. Scroll to top so the user sees the results instantly
+        container.scrollTop = 0;
     }
 
     // ==================== MULTI-SELECT FUNCTIONS ====================
@@ -1753,26 +1745,45 @@
     function populateMultiSelect(category, options, containerId) {
         const container = document.getElementById(containerId);
         container.innerHTML = '';
-        const isStorage = (category === 'ssdNames' || category === 'hddNames');
+        
+        // === CUSTOM RENDERER FOR STORAGE (SSD/HDD) ===
+        if (category === 'ssdNames' || category === 'hddNames') {
+            options.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'multi-option';
+                div.dataset.value = item.name;
+                
+                // IMPORTANT: This line allows the filter buttons to work
+                div.dataset.sizeStr = item.sizeStr; 
+                
+                const count = manualStorage.get(item.name) || 0;
+                if(count > 0) div.classList.add('selected');
 
+                const label = `<span style="font-size:0.9em; flex:1;">${item.name} | ${item.sizeStr} | ${item.speed} MB/s</span>`;
+
+                // Quantity UI
+                const qtyUI = `
+                    <div class="qty-controls">
+                         <span class="qty-val" id="qty_${index}_${category}" style="${count===0?'display:none':''}">${count}</span>
+                         <button class="qty-btn" onclick="updateStorageQty('${item.name.replace(/'/g, "\\'")}', 1, '${category}')">+</button>
+                         ${count > 0 ? `<button class="qty-btn" onclick="updateStorageQty('${item.name.replace(/'/g, "\\'")}', -1, '${category}')">-</button>` : ''}
+                    </div>
+                `;
+
+                div.innerHTML = label + qtyUI;
+                // Stop click propagation so clicking the row doesn't close dropdown or conflict
+                div.onclick = (e) => e.stopPropagation(); 
+                container.appendChild(div);
+            });
+            updateDisplayLabel(category);
+            return;
+        }
+
+        // === STANDARD RENDERER (CPU, GPU, etc) ===
         options.forEach((opt, index) => {
             const div = document.createElement('div');
             div.className = 'multi-option';
-            
-            // Check selection state
-            let isSelected = false;
-            let count = 0;
-
-            if (isStorage) {
-                if (selectedOptions[category].has(opt)) {
-                    isSelected = true;
-                    count = selectedOptions[category].get(opt);
-                }
-            } else {
-                if (selectedOptions[category].has(opt)) isSelected = true;
-            }
-
-            if (isSelected) div.classList.add('selected');
+            if (selectedOptions[category].has(opt)) div.classList.add('selected');
             div.dataset.value = opt;
             div.dataset.index = index; 
             
@@ -1780,49 +1791,28 @@
             
             if (category === 'ramNames') {
                 const r = DB.ram.get(opt);
-                if (r) label = `<span style="font-size:0.9em">${r.name} | ${r.totalSize}GB | ${r.type} | ${r.freq} MHz</span>`;
+                if (r) {
+                    label = `<span style="font-size:0.9em">${r.name} | ${r.totalSize}GB | ${r.type} | ${r.freq} MHz</span>`;
+                }
             } else if (category === 'moboNames') {
                 const m = DB.mobo.get(opt);
                 if (m) label = `<span style="font-size:0.9em">${m.name} | PCI Slots: ${m.pciSlots}</span>`;
             } else if (category === 'caseNames') {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
-            } else if (isStorage) {
-                const s = DB.storage.get(opt);
-                if (s) {
-                    label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
-                }
             } else {
                 if (category === 'vram') label += ' GB';
                 if (category === 'length') label += ' mm';
             }
 
-            // HTML Construction
-            if (isStorage) {
-                // QUANTITY CONTROLS FOR STORAGE
-                const safeName = opt.replace(/'/g, "\\'");
-                div.innerHTML = `
-                    <div class="option-left" onclick="toggleStorageSelection('${category}', '${safeName}', 1)">
-                        <div class="cb-custom"></div>
-                        <span>${label}</span>
-                    </div>
-                    <div class="qty-controls" onclick="event.stopPropagation()">
-                        <button class="qty-btn" onclick="modifyStorageQty('${category}', '${safeName}', -1)">-</button>
-                        <span class="qty-val">${count}</span>
-                        <button class="qty-btn" onclick="modifyStorageQty('${category}', '${safeName}', 1)">+</button>
-                    </div>
-                `;
-            } else {
-                // STANDARD BOOLEAN SELECTION
-                div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
-                div.onclick = (e) => toggleOption(category, opt, div, e);
-            }
-            
+            div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
+            div.onclick = (e) => toggleOption(category, opt, div, e);
             container.appendChild(div);
         });
         
         updateDisplayLabel(category);
     }
+
 
     // New Storage Toggle (Sets to 1 if not present, else removes)
     window.toggleStorageSelection = function(category, value, defaultQty) {
