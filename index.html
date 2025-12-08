@@ -1460,14 +1460,15 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                let sizeRaw = get(cells, 'Size');
-                let sizeGB = 0;
-                if(sizeRaw.includes('TB')) sizeGB = parseFloat(sizeRaw) * 1024;
-                else sizeGB = parseFloat(sizeRaw);
-
-                base.sizeStr = sizeRaw;
-                base.sizeGB = sizeGB;
-                base.speed = parseFloat(get(cells, 'Transfer Speed')) || 0;
+                base.sizeStr = get(cells, 'Size');
+                
+                // Parsing speed safely to avoid "0 MB/s" errors
+                let speedRaw = get(cells, 'Transfer Speed');
+                if(!speedRaw) speedRaw = get(cells, 'Speed'); // Fallback
+                
+                // Remove commas and non-numeric characters before parsing
+                base.speed = parseInt(speedRaw.replace(/[^0-9]/g, '')) || 0;
+                
                 base.type = get(cells, 'Type');
             }
 
@@ -2130,7 +2131,7 @@
             let interactiveHTML = '';
             if (b.storage) {
                 interactiveHTML += renderInteractive('Storage', b.storage, buildIdx, 'storage',
-                    `${b.storage.sizeStr} | ${b.storage.type} | ${b.storage.speed} MB/s`
+                    `${b.storage.sizeStr} | ${b.storage.type} | Level ${b.storage.level} | ${b.storage.speed} MB/s`
                 );
             }
             if (b.case) {
@@ -2324,7 +2325,7 @@
             if (type === 'cases') details = `Max GPU: ${p.maxGpuLen}mm | CPU H: ${p.maxCpuHeight}mm | Size: ${p.size} | GPU Slots: ${p.gpuSlots}`;
             if (type === 'cooler') details = `${p.type} | ${p.type.includes('Air') ? `Height: ${p.height}mm` : `Size: ${p.size}mm`} | Flow: ${p.flow}`;
             if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow} CFM`;
-            if (type === 'storage') details = `${p.sizeStr} | ${p.type} | ${p.speed} MB/s`;
+            if (type === 'storage') details = `${p.sizeStr} | ${p.type} | Level ${p.level} | ${p.speed} MB/s`;
 
             const tr = document.createElement('tr');
             
