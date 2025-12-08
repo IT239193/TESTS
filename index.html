@@ -1411,50 +1411,7 @@
     }
 
     // ==================== FILE PARSING ====================
-    function parseHTML(fname, html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const rows = Array.from(doc.querySelectorAll('tr'));
-        if (rows.length < 2) return 0;
-
-        const headers = Array.from(rows[0].querySelectorAll('td')).map(td => td.getAttribute('div') || td.textContent.trim());
-        const idx = {};
-        headers.forEach((h, i) => idx[h] = i);
-        const get = (cells, key) => (idx[key] !== undefined && cells[idx[key]]) ? cells[idx[key]].textContent.trim() : '';
-
-        // Determine File Type based on name
-        let type = '';
-        const n = fname.toLowerCase();
-        
-        if (n.includes('cpu.txt')) type = 'cpu';
-        else if (n.includes('gpu')) type = 'gpu';
-        else if (n.includes('ram')) type = 'ram';
-        else if (n.includes('motherboard')) type = 'mobo';
-        else if (n.includes('cases')) type = 'cases';
-        else if (n.includes('cooler')) type = 'cooler';
-        else if (n.includes('psu') || n.includes('power supplies')) type = 'psu';
-        else if (n.includes('case fans') || n.includes('fans')) type = 'fan';
-        else if (n.includes('storage')) type = 'storage';
-
-        if (!type) return 0;
-
-        let addedCount = 0; 
-
-        for (let i = 1; i < rows.length; i++) {
-            const cells = rows[i].querySelectorAll('td');
-            if (!cells.length) continue;
-            
-            const price = parseFloat(get(cells, 'Price'));
-            if (isNaN(price) || price <= 0) continue;
-
-            const base = {
-                name: get(cells, 'Part Name'),
-                price: price,
-                level: parseInt(get(cells, 'Level')) || 0,
-                mfgr: get(cells, 'Manufacturer')
-            };
-
-            if (type === 'cpu') {
+                if (type === 'cpu') {
                 base.scoreTS = parseInt(get(cells, 'Basic CPU Score (TS)')) || 0;
                 base.scoreTSX = parseInt(get(cells, 'Basic CPU Score (TSX)')) || 0;
                 if (!base.scoreTS) base.scoreTS = base.scoreTSX;
@@ -1463,9 +1420,13 @@
                 base.watts = parseInt(get(cells, 'Wattage')) || 0;
                 base.multTS = parseFloat(get(cells, 'Mem Clock Multiplier (TS)')) || 0;
                 base.multTSX = parseFloat(get(cells, 'Mem Clock Multiplier (TSX)')) || 0;   
-     base.memChannelMultTS = parseFloat(get(cells, 'Mem Channels Multiplier (TS)')) || 0;
-    base.memChannelMultTSX = parseFloat(get(cells, 'Mem Channels Multiplier (TSX)')) || 0;
+                
+                // --- FIX: CHANNEL MULTIPLIERS ADDED ---
+                base.memChannelMultTS = parseFloat(get(cells, 'Mem Channels Multiplier (TS)')) || 0;
+                base.memChannelMultTSX = parseFloat(get(cells, 'Mem Channels Multiplier (TSX)')) || 0;
                 base.maxMemChannels = parseInt(get(cells, 'Max Memory Channels')) || 2;
+                // -------------------------------------
+
                 base.defaultMem = parseInt(get(cells, 'Default Memory Speed')) || 2133;
                 base.memTypes = get(cells, 'Supported Memory Types');
                 base.cores = get(cells, 'Cores');
@@ -1476,7 +1437,8 @@
                 base.canOC = get(cells, 'Can Overclock');
                 base.ocScore = get(cells, 'Overclock Basic CPU Score') || "-";
                 base.canDelid = get(cells, 'Can Delid');
-            } else if (type === 'gpu') {
+            }
+ else if (type === 'gpu') {
                 base.score = parseInt(get(cells, 'Single GPU Graphics Score')) || 0;
                 base.score2 = parseInt(get(cells, 'Double GPU Graphics Score')) || 0;
                 base.score3 = parseInt(get(cells, 'Triple GPU Graphics Score')) || 0;
@@ -2180,7 +2142,7 @@
                 ramTiers.push(null); 
             }
 
-            for (const ram of ramTiers) {
+                        for (const ram of ramTiers) {
                 if (builds.length >= maxPoolSize) break;
 
                 for(const sticks of stickCounts) {
@@ -2188,20 +2150,24 @@
 
                     let ramCost = 0, ramWatts = 0, adjScore = baseScore;
 
-if (ram) {
-    ramCost = ram.price * sticks;
-    
-    // RAM Frequency bonus (existing logic)
-    const memClockMult = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
-    if (memClockMult && ram.freq > cpu.defaultMem) {
-        adjScore += ((ram.freq - cpu.defaultMem) * memClockMult);
-    }
-    
-    // RAM Channel bonus (NEW - this makes stick count matter!)
-    const memChannelMult = currentMode === 'TS' ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
-    let activeChannels = Math.min(sticks, cpu.maxMemChannels);
-    adjScore += (memChannelMult * activeChannels);
-}
+                    if (ram) {
+                        ramCost = ram.price * sticks;
+                        
+                        // 1. RAM Frequency Bonus
+                        const memClockMult = currentMode === 'TS' ? cpu.multTS : cpu.multTSX;
+                        if (memClockMult && ram.freq > cpu.defaultMem) {
+                            adjScore += ((ram.freq - cpu.defaultMem) * memClockMult);
+                        }
+                        
+                        // 2. RAM Channel Bonus (FIXED)
+                        const memChannelMult = currentMode === 'TS' ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
+                        // Use stick count, but cap at CPU's max memory channels (e.g., 4 sticks on dual channel CPU = 2 active channels)
+                        let activeChannels = Math.min(sticks, cpu.maxMemChannels || 2);
+                        
+                        if (memChannelMult) {
+                             adjScore += (memChannelMult * activeChannels);
+                        }
+                    }
 
                     let mobo = null;
                     if (useMobo) {
@@ -2218,6 +2184,7 @@ if (ram) {
                         
                         if (sticks === 4 && mobo.size === 'Mini-ITX') continue;
                     }
+
 
                     for (const gpu of validGpu) {
                         // Multi GPU Compatibility Checks
@@ -2303,13 +2270,20 @@ let psu = null;
                         if (minScore > 0 && final3D < minScore) continue;
 
                         builds.push({
-                            score: final3D,
-                            diff: final3D - target,
-                            price: total,
-                            watts: totalWatts,
-                            cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
-                            case: bCase, cooler, psu, fan, 
-                            storages: [...finalStorageList] // Clone array
+    score: final3D,
+    diff: final3D - target,
+    price: total,
+    watts: totalWatts,
+    cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
+    case: bCase, cooler, psu, fan, 
+    storages: [...finalStorageList],
+    
+    // ADD THIS LINE BELOW:
+    cpuAdj: adjScore 
+
+
+
+ // Clone array
                         });
                         
                         if (builds.length >= maxPoolSize) break;
@@ -2383,7 +2357,8 @@ let psu = null;
                 Base Mem/Max Mem: ${b.gpu.baseMem || '?'}/${b.gpu.maxMem || '?'} MHz
             `;
             
-            const cpuBaseScore = currentMode === 'TS' ? b.cpu.scoreTS : b.cpu.scoreTSX;
+            // Uses the adjusted score calculated during generation
+const cpuBaseScore = b.cpuAdj || (currentMode === 'TS' ? b.cpu.scoreTS : b.cpu.scoreTSX);
             const ocText = b.cpu.canOC === 'Yes' ? `OC: ${b.cpu.ocScore}` : 'Locked';
             
             const cpuSpecs = `
