@@ -252,7 +252,6 @@
             color: var(--text-muted);
             font-size: 0.8em;
         }
-
         .multi-dropdown {
             position: absolute;
             top: 105%;
@@ -405,7 +404,7 @@
             border: 1px solid var(--error);
             color: var(--text-main);
             padding: 15px;
-            margin-bottom: 20px; /* moved up */
+            margin-top: 20px;
             border-radius: 8px;
             display: flex;
             align-items: center;
@@ -414,8 +413,6 @@
             font-weight: 500;
         }
         #perfWarning.hidden { display: none; }
-        #perfWarning.permanently-hidden { display: none !important; }
-
         #perfWarning span { font-weight: bold; color: var(--error); }
         
         .warning-close {
@@ -484,15 +481,6 @@
             min-width: 320px;
             height: 60px;
             cursor: pointer;
-        }
-        
-        .score-stats-display {
-            color: #95a5a6;
-            font-weight: 500;
-            font-size: 1.1em;
-            margin-bottom: 5px;
-            width: 100%;
-            text-align: right;
         }
 
         .min-score-container {
@@ -604,8 +592,6 @@
             font-weight: bold;
             margin-top: 5px;
         }
-
-
         .card-body {
             padding: 20px;
             display: grid;
@@ -975,16 +961,14 @@
     <header>
         <h1>PCBS2 Ultimate Builder</h1>
         <div class="header-subtitle">contact me on discord for bug reports @timmy2131_</div>
-    </header>
-
-    <!-- Warning Message Moved Here -->
-    <div id="perfWarning" class="hidden">
-        <div>
-            <span>⚠ PERFORMANCE WARNING:</span> 
-            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
+<div id="perfWarning" class="hidden">
+            <div>
+                <span>⚠ PERFORMANCE WARNING:</span> 
+                If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool will be massive, causing slow performance and potential browser freezing. Please refine your selection.
+            </div>
+            <div class="warning-close" onclick="dismissPerfWarning()">&times;</div>
         </div>
-        <div class="warning-close" onclick="closeWarningPermanent()">&times;</div>
-    </div>
+    </header>
 
     <div class="controls-wrapper" id="controls">
         <div class="section-header">1. Benchmarking & Goals</div>
@@ -1016,7 +1000,7 @@
                 <input type="number" id="level" value="30" min="1" oninput="refreshDropdowns()">
             </div>
             <div class="input-group">
-                <label>Max Results Pool (if you decrease it will be faster but show less results)</label>
+                <label>max results pool (if you decrease it will be faster but show less results)</label>
                 <input type="text" id="resLimit" value="4,000,000">
             </div>
             <div class="input-group">
@@ -1030,7 +1014,7 @@
             <div class="input-group">
                 <label>Include RAM</label>
                 <div class="checkbox-container">
-                    <input type="checkbox" id="incRam" checked> <!-- Checked Default -->
+                    <input type="checkbox" id="incRam" checked> <!-- Unchecked Default -->
                     <label for="incRam">Suggest RAM</label>
                 </div>
             </div>
@@ -1044,24 +1028,17 @@
                 </select>
             </div>
             
-            <!-- Filter by Target RAM Capacity (Total Size defined in RAM.txt) -->
+            <!-- New: Filter by Target RAM Capacity (Total Size defined in RAM.txt) -->
+            
             <div class="input-group">
-                <label>Target RAM Capacity</label>
-                <div id="multiRamSize" class="multi-select-container">
-                    <div class="multi-select-display" onclick="toggleDropdown('ramSizeDropdown')">Any</div>
-                    <div id="ramSizeDropdown" class="multi-dropdown">
-                        <div class="dropdown-search-container">
-                            <input type="number" class="dropdown-search" placeholder="Type size (GB) & Enter..." onkeydown="handleCustomRamSize(event, this)">
-                        </div>
-                        <div class="quick-filter-bar">
-                            <button class="filter-btn btn-clear" onclick="clearFilter('ramSizes')">Clear</button>
-                        </div>
-                        <div class="dropdown-list-container" id="ramSizeListContainer"></div>
-                    </div>
-                </div>
+                <label>Target RAM Size (Total GB)</label>
+                <input type="number" id="targetRamSizeInput" class="input-group input" placeholder="e.g. 128 - Press Enter to apply" 
+                       style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; font-size: 1em;"
+                       onkeydown="if(event.key === 'Enter') { event.preventDefault(); document.getElementById('resLimit').focus(); }">
             </div>
 
-            <!-- Filter by Manufacturer -->
+
+            <!-- New: Filter by Manufacturer -->
             <div class="input-group">
                 <label>RAM Manufacturer</label>
                 <div id="multiRamMfgr" class="multi-select-container">
@@ -1075,9 +1052,8 @@
                 </div>
             </div>
 
-            <!-- New: Filter by Frequency -->
             <div class="input-group">
-                <label>RAM Frequency</label>
+                <label>Ram Frequency</label>
                 <div id="multiRamFreq" class="multi-select-container">
                     <div class="multi-select-display" onclick="toggleDropdown('ramFreqDropdown')">Any</div>
                     <div id="ramFreqDropdown" class="multi-dropdown">
@@ -1088,6 +1064,7 @@
                     </div>
                 </div>
             </div>
+
 
             <div class="input-group" style="grid-column: 1 / -1;">
                 <label>Specific RAM Model(s)</label>
@@ -1307,6 +1284,9 @@
                 <input type="number" id="extraWatts" value="0">
             </div>
         </div>
+        
+        <!-- Warning Message -->
+        
 
         <button class="btn-generate" onclick="generateBuilds()">GENERATE BUILDS</button>
     </div>
@@ -1334,18 +1314,17 @@
                 <option value="value_asc">Most Underperforming (Worst Value)</option>
             </select>
 
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
-                <!-- New Score Range Display -->
-                <div id="scoreRangeDisplay" class="score-stats-display">Lowest score in list: - | Highest Score in list: -</div>
-                
-                <div class="min-score-container">
-                    <label class="min-score-label">Min 3D Score (press enter to apply):</label>
-                    <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
-                </div>
+            
+            <div id="scoreRangeDisplay" style="color: #bdc3c7; font-weight: 500; text-align: center; margin-bottom: 10px; width: 100%; border-top: 1px solid var(--border); padding-top: 10px; font-size: 1.2em;">
+                Lowest score in list: N/A | Highest Score in list: N/A
+            </div>
+        
+        <div class="min-score-container">
+                <label class="min-score-label">Min 3D Score (press enter to apply):</label>
+                <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
             </div>
         </div>
     </div>
-
 
     <div id="resultsList"></div>
 
@@ -1385,9 +1364,9 @@
         moboNames: new Set(),
         caseNames: new Set(),
         ramNames: new Set(),
-        ramSizes: new Set(), // Filter by 'Total Size (GB)'
-        ramMfgrs: new Set(), // Filter by Manufacturer
-        ramFreqs: new Set(), // New: Filter by Frequency
+        ramSizes: new Set(), // DEPRECATED, NOW USES MANUAL INPUT
+        ramMfgrs: new Set(), // New: Filter by Manufacturer
+        ramFreqs: new Set(),
         // Changed to Map to store Counts for storage
         ssdNames: new Map(), // name -> count
         hddNames: new Map()  // name -> count
@@ -1417,11 +1396,27 @@
     let itemsPerPage = 100;
     let currentPopupData = null;
 
+
+    // On Load, check if the warning should be hidden
+    window.addEventListener('DOMContentLoaded', () => {
+        if (localStorage.getItem('hidePerfWarning') === 'true') {
+            const warningBox = document.getElementById('perfWarning');
+            if(warningBox) warningBox.classList.add('hidden');
+        }
+    });
+    
+    function dismissPerfWarning() {
+        localStorage.setItem('hidePerfWarning', 'true');
+        document.getElementById('perfWarning').classList.add('hidden');
+    }
+
     // ==================== UTILITY FUNCTIONS ====================
     const formatCurrency = num => '$' + num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const formatNumber = num => num.toLocaleString('en-US');
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
+
+   
 
     // Helper to convert "1TB", "500GB", "500" into raw GB value
     function parseStorageInput(str) {
@@ -1438,7 +1433,7 @@
         const el = document.getElementById(id);
         if(el) {
             el.addEventListener('input', e => {
-                let v = e.target.value.replace(/\D/g, '');
+                let v = e.target.value.replace(/\\D/g, '');
                 e.target.value = v ? parseInt(v).toLocaleString('en-US') : '';
             });
         }
@@ -1460,11 +1455,6 @@
         Object.keys(Loaded).forEach(k => Loaded[k] = false);
 
         initGpuCountDropdown(); // Initialize specific static dropdown
-        
-        // Warning Persistence Check
-        if(localStorage.getItem('perfWarnClosed') === 'true') {
-            document.getElementById('perfWarning').classList.add('permanently-hidden');
-        }
 
         const targets = [
             { id: 'cpu',       file: 'CPU.txt',              label: 'CPU' },
@@ -1540,7 +1530,6 @@
         const idx = {};
         headers.forEach((h, i) => idx[h] = i);
         const get = (cells, key) => (idx[key] !== undefined && cells[idx[key]]) ? cells[idx[key]].textContent.trim() : '';
-
         // Determine File Type based on name
         let type = '';
         const n = fname.toLowerCase();
@@ -1786,11 +1775,10 @@
         populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
         populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
         
-        // Populate RAM Total Sizes
-        populateMultiSelect('ramSizes', [...new Set(rams.map(r => r.totalSize).filter(s => s))].sort((a,b) => a-b), 'ramSizeListContainer');
-        // Populate RAM Manufacturers
+        // NEW: Populate RAM Total Sizes
+        // Dropdown for ramSizes has been removed.
+        // NEW: Populate RAM Manufacturers
         populateMultiSelect('ramMfgrs', [...new Set(rams.map(r => r.mfgr).filter(m => m))].sort(), 'ramMfgrListContainer');
-        // Populate RAM Frequencies
         populateMultiSelect('ramFreqs', [...new Set(rams.map(r => r.freq).filter(f => f))].sort((a,b) => a-b), 'ramFreqListContainer');
 
         // Populate Size Buttons for Storage
@@ -1920,14 +1908,14 @@
                 }
             } else {
                 if (category === 'vram' || category === 'ramSizes') label += ' GB';
-                if (category === 'length') label += ' mm';
                 if (category === 'ramFreqs') label += ' MHz';
+                if (category === 'length') label += ' mm';
             }
 
             // HTML Construction
             if (isStorage) {
                 // QUANTITY CONTROLS FOR STORAGE
-                const safeName = opt.replace(/'/g, "\\'");
+                const safeName = opt.replace(/'/g, "\\\\'");
                 div.innerHTML = `
                     <div class="option-left" onclick="toggleStorageSelection('${category}', '${safeName}', 1)">
                         <div class="cb-custom"></div>
@@ -2031,23 +2019,6 @@
         updateDisplayLabel(category);
     }
 
-    // Handles the typing of custom RAM size numbers
-    function handleCustomRamSize(event, input) {
-        if (event.key === 'Enter') {
-            const val = parseInt(input.value);
-            if (!isNaN(val) && val > 0) {
-                // Add value to the set
-                selectedOptions.ramSizes.add(val);
-                // Refresh list so it shows as selected (or added if we supported ad-hoc rendering)
-                refreshDropdowns(); 
-                // Clear input
-                input.value = '';
-                // Update label
-                updateDisplayLabel('ramSizes');
-            }
-        }
-    }
-
     function applyQuickFilter(category, type) {
         const keywords = filterKeywords[category][type];
         if (!keywords) return;
@@ -2074,7 +2045,6 @@
         else if(category === 'length') containerId = 'lengthListContainer';
         else if(category === 'moboNames') containerId = 'moboListContainer';
         else if(category === 'ramNames') containerId = 'ramListContainer';
-        else if(category === 'ramSizes') containerId = 'ramSizeListContainer';
         else if(category === 'ramMfgrs') containerId = 'ramMfgrListContainer';
         else if(category === 'ramFreqs') containerId = 'ramFreqListContainer';
         else if(category === 'caseNames') containerId = 'caseListContainer';
@@ -2105,7 +2075,6 @@
             case 'gpuNames': displayId = 'multiGpu'; break;
             case 'gpuCounts': displayId = 'multiGpuCount'; break;
             case 'ramNames': displayId = 'multiRam'; break;
-            case 'ramSizes': displayId = 'multiRamSize'; break;
             case 'ramMfgrs': displayId = 'multiRamMfgr'; break;
             case 'ramFreqs': displayId = 'multiRamFreq'; break;
             case 'moboNames': displayId = 'multiMobo'; break;
@@ -2133,7 +2102,6 @@
             let val = Array.from(selectedOptions[category])[0];
             if (category === 'vram' || category === 'ramSizes') val += ' GB';
             if (category === 'length') val += ' mm';
-            if (category === 'ramFreqs') val += ' MHz';
             if (category === 'gpuCounts') {
                  // Convert numeric to text for single selection display
                  val = (val === 1) ? "Single GPU" : (val === 2 ? "Dual GPU" : (val === 3 ? "Triple GPU" : "Quad GPU"));
@@ -2152,7 +2120,7 @@
                      firstVal = (firstVal === 1) ? "Single GPU" : (firstVal === 2 ? "Dual GPU" : (firstVal === 3 ? "Triple GPU" : "Quad GPU"));
                 }
                 
-                let suffix = (category === 'vram' || category === 'ramSizes' ? ' GB' : (category === 'length' ? ' mm' : (category === 'ramFreqs' ? ' MHz' : '')));
+                let suffix = (category === 'vram' || category === 'ramSizes' ? ' GB' : (category === 'length' ? ' mm' : ''));
                 display.textContent = `${firstVal}${suffix} + ${size - 1} others`;
             }
         }
@@ -2184,67 +2152,15 @@
         return '';
     }
 
-    // ==================== 3DMARK CALCULATION ====================
-    
-    // IMPLEMENTATION: Live CPU Score Calculator
-    function calculateCpuScore(cpu, ram, stickCount, mode, useOC) {
-        // 1. Determine Freq
-        let rawFreq = useOC ? cpu.maxFreq : cpu.baseFreq;
-        let freq = parseFloat(rawFreq) || 0;
-
-        // 2. Select Multipliers
-        const isTS = (mode === 'TS');
-        const coreMult = isTS ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
-        const memChanMult = isTS ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
-        const memClockMult = isTS ? cpu.multTS : cpu.multTSX;
-        const adjustment = isTS ? cpu.finalAdjTS : cpu.finalAdjTSX;
-
-        // 3. RAM Logic
-        let activeChannels, actualMemSpeed;
-        if (ram) {
-            // Enabled: MIN(Sticks, MaxSupported)
-            activeChannels = Math.min(stickCount, cpu.maxMemChannels);
-            actualMemSpeed = ram.freq;
-        } else {
-            // Disabled: Use CPU Defaults
-            activeChannels = cpu.maxMemChannels;
-            actualMemSpeed = cpu.defaultMem;
-        }
-
-        // 4. Formula
-        // Score = FLOOR ( ( (CoreMult * Freq) + (ChanMult * ActiveChans) + (MemClockMult * Speed) + Adj ) * 298 )
-        const coreScore = coreMult * freq;
-        const chanScore = memChanMult * activeChannels;
-        const speedScore = memClockMult * actualMemSpeed;
-        
-        const sum = coreScore + chanScore + speedScore + adjustment;
-        const final = Math.floor(sum * 298);
-
-        return final > 0 ? final : 0;
-    }
-
-    function calculate3DMark(cpuScore, gpuScore) {
-        if (!cpuScore || !gpuScore) return 0;
-        return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
-    }
-
-    // New: Function to handle warning closure permanently
-    function closeWarningPermanent() {
-        document.getElementById('perfWarning').classList.add('permanently-hidden');
-        document.getElementById('perfWarning').classList.add('hidden');
-        localStorage.setItem('perfWarnClosed', 'true');
-    }
-
     function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for CPU and GPU files to load from datas/ folder!");
 
         // PERFORMANCE WARNING CHECK
-        const ramSpecific = selectedOptions.ramNames.size > 0 || selectedOptions.ramSizes.size > 0 || selectedOptions.ramMfgrs.size > 0 || selectedOptions.ramFreqs.size > 0;
+        const ramSpecific = selectedOptions.ramNames.size > 0 || selectedOptions.ramSizes.size > 0 || selectedOptions.ramMfgrs.size > 0;
         const generalSpecific = selectedOptions.cpuNames.size > 0 || selectedOptions.gpuNames.size > 0;
         const warningBox = document.getElementById('perfWarning');
-        const isPermanentlyClosed = localStorage.getItem('perfWarnClosed') === 'true';
         
-        if (!ramSpecific && !generalSpecific && !isPermanentlyClosed) {
+        if (!ramSpecific && !generalSpecific && localStorage.getItem('hidePerfWarning') !== 'true') {
             warningBox.classList.remove('hidden');
         } else {
             warningBox.classList.add('hidden');
@@ -2256,356 +2172,303 @@
         const allMobos = Array.from(DB.mobo.values());
         const allCases = Array.from(DB.cases.values());
         const allCoolers = Array.from(DB.cooler.values());
-        const allPsu = Array.from(DB.psu.values());
+        const allPsus = Array.from(DB.psu.values());
         const allFans = Array.from(DB.fan.values());
-        
-        const allStorage = Array.from(DB.storage.values());
 
         const budget = parseVal('budget');
-        const target = parseVal('targetScore');
-        const minScore = parseVal('minScoreInput');
-        const lvl = parseInt(document.getElementById('level').value);
-        // GPU Count Logic: "Any" means [1,2,3,4] unless specified
-        const rawCounts = Array.from(selectedOptions.gpuCounts);
-        const activeGpuCounts = rawCounts.length > 0 ? rawCounts : [1, 2, 3, 4];
+        const targetScore = parseVal('targetScore');
+        const level = parseInt(document.getElementById('level').value);
+        const resLimit = parseIntVal('resLimit') || 4000000;
+        itemsPerPage = parseInt(document.getElementById('resultsPerPage').value) || 100;
+        const useOC = document.getElementById('useOC').checked;
 
-        const maxPoolSize = parseIntVal('resLimit'); 
-        const sort = document.getElementById('mainSort').value;
-        const useOC = document.getElementById('useOC').checked; // Check Toggle State
+        // Min-Max Constraints
+        const maxTotalWatts = parseInt(document.getElementById('maxTotalWatts').value) || Infinity;
+        const maxCpuWatts = parseInt(document.getElementById('maxCpuWatts').value) || Infinity;
+        const maxGpuWatts = parseInt(document.getElementById('maxGpuWatts').value) || Infinity;
+        const extraWatts = parseInt(document.getElementById('extraWatts').value) || 0;
+        const minScore3D = parseVal('minScoreInput');
 
-        const limitTotalW = parseInt(document.getElementById('maxTotalWatts').value);
-        const limitCpuW = parseInt(document.getElementById('maxCpuWatts').value);
-        const limitGpuW = parseInt(document.getElementById('maxGpuWatts').value);
-        const extraW = parseInt(document.getElementById('extraWatts').value) || 0;
-
-        const useRam = document.getElementById('incRam').checked && Loaded.ram;
-        const reqSticks = parseInt(document.getElementById('ramSticks').value);
-        const stickCounts = reqSticks === 0 ? [1, 2, 4] : [reqSticks];
-
-        const useMobo = document.getElementById('incMobo').checked && Loaded.mobo;
-        const useCase = document.getElementById('incCase').checked && Loaded.cases;
-        const useCooler = document.getElementById('incCooler').checked && Loaded.cooler;
-        const usePsu = document.getElementById('incPsu').checked && Loaded.psu;
-        const useFan = document.getElementById('incFans').checked && Loaded.fan;
-        const useStorage = document.getElementById('incStorage').checked && Loaded.storage;
-        
-        if (useMobo) allMobos.sort((a,b) => a.price - b.price);
-        if (useCase) allCases.sort((a,b) => a.price - b.price);
-        if (usePsu) allPsu.sort((a,b) => a.price - b.price);
-        
-        // Smart Sorting Logic
-        const getSmartSort = (metric) => (a, b) => {
-            // High Score -> High Perf
-            if (sort === 'score_desc') return b[metric] - a[metric] || b.price - a.price;
-            // Low Score -> Low Perf
-            if (sort === 'score_asc') return a[metric] - b[metric] || a.price - b.price;
-            // High Price -> High Price
-            if (sort === 'price_desc') return b.price - a.price;
-            // Low Price / Diff -> Low Price
-            if (sort === 'price_asc' || sort === 'diff') return a.price - b.price;
-            
-            // Value = Perf / Price
-            const valA = a[metric] / (a.price || 1);
-            const valB = b[metric] / (b.price || 1);
-            
-            if (sort === 'value_desc') return valB - valA; // Best Value
-            if (sort === 'value_asc') return valA - valB; // Worst Value
-            
-            return a.price - b.price; // Default
+        // Optional Component flags
+        const inc = {
+            mobo: document.getElementById('incMobo').checked,
+            ram: document.getElementById('incRam').checked,
+            cases: document.getElementById('incCase').checked,
+            cooler: document.getElementById('incCooler').checked,
+            psu: document.getElementById('incPsu').checked,
+            fan: document.getElementById('incFans').checked,
+            storage: document.getElementById('incStorage').checked
         };
-        
-        if (useCooler) allCoolers.sort(getSmartSort('flow'));
-        if (useFan) allFans.sort(getSmartSort('flow'));
 
-        // ================= PRE-CALCULATE STORAGE =================
-        let finalStorageList = [];
-        let totalStorageCost = 0;
-        let requiredSSDSlots = 0;
-        let requiredHDDSlots = 0;
+        const resCount = document.getElementById('resCount');
+        resCount.innerText = "Filtering components...";
 
-        selectedOptions.ssdNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= lvl) {
-                for(let i=0; i<count; i++) {
-                    finalStorageList.push(part);
-                    totalStorageCost += part.price;
-                    requiredSSDSlots++;
-                }
-            }
-        });
-
-        selectedOptions.hddNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= lvl) {
-                for(let i=0; i<count; i++) {
-                    finalStorageList.push(part);
-                    totalStorageCost += part.price;
-                    requiredHDDSlots++;
-                }
-            }
-        });
-
-        if (useStorage && finalStorageList.length === 0) {
-            const fallback = allStorage.filter(s => s.type !== 'HDD' && s.level <= lvl).sort((a,b) => a.price - b.price)[0];
-            if (fallback) {
-                finalStorageList.push(fallback);
-                totalStorageCost += fallback.price;
-                requiredSSDSlots++;
-            }
-        }
-        // =========================================================
-
-        const validCpu = allCpus.filter(c => {
-            if (c.level > lvl) return false;
-            if (limitCpuW && (c.watts || 0) > limitCpuW) return false;
+        // ================== PRE-FILTERING ==================
+        const cpus = allCpus.filter(c => {
+            if (c.level > level) return false;
+            if (c.watts > maxCpuWatts) return false;
             if (selectedOptions.socket.size > 0 && !selectedOptions.socket.has(c.socket)) return false;
             if (selectedOptions.cpuNames.size > 0 && !selectedOptions.cpuNames.has(c.name)) return false;
             return true;
         });
-
-        // Filter GPUs for generic constraints (NOT Score/Count yet)
-        const validGpu = allGpus.filter(g => {
-            if (g.level > lvl) return false;
-            if (limitGpuW && (g.watts || 0) > limitGpuW) return false;
+        
+        const gpus = allGpus.filter(g => {
+            if (g.level > level) return false;
+            if (g.watts > maxGpuWatts) return false;
             if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return false;
             if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
             if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
             return true;
         });
 
-        validCpu.sort((a,b) => {
-            const scoreA = currentMode === 'TS' ? a.scoreTS : a.scoreTSX;
-            const scoreB = currentMode === 'TS' ? b.scoreTS : b.scoreTSX;
-            return scoreB - scoreA;
-        });
-
-        // Pre-sort GPUs generally by single score
-        validGpu.sort((a,b) => b.score - a.score);
-
-        builds = [];
+        const filteredRams = inc.ram ? allRams.filter(r => r.level <= level) : [];
+        const mobos = inc.mobo ? allMobos.filter(m => m.level <= level) : [];
+        const cases = inc.cases ? allCases.filter(c => c.level <= level) : [];
+        const coolers = inc.cooler ? allCoolers.filter(c => c.level <= level) : [];
+        const psus = inc.psu ? allPsus.filter(p => p.level <= level) : [];
+        const fans = inc.fan ? allFans.filter(f => f.level <= level) : [];
         
-        for (const cpu of validCpu) {
-            if (builds.length >= maxPoolSize) break;
+        let combinations = [];
+        resCount.innerText = `Generating ${cpus.length * gpus.length} base pairs...`;
+        
+        builds = [];
+        let skipped = 0;
+        let idCounter = 0;
 
-            let ramTiers = [];
-            if (useRam) {
-                // 1. Filter RAMs
-                let compatibleRam = allRams.filter(r => 
-                    r.level <= lvl && 
-                    cpu.memTypes.includes(r.type) && 
-                    (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
-                    (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.totalSize)) && // Size Filter
-                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) && // Brand Filter
-                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) // Frequency Filter
-                );
-                
-                // 2. Grouping Logic
-                const bestValueBySpec = new Map();
-                for (const r of compatibleRam) {
-                    const mfgr = r.mfgr || "Generic";
-                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
-                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
-                        bestValueBySpec.set(key, r);
+        // ================== MAIN GENERATION LOOP ==================
+        // This logic is complex because it tries to find the best parts for each CPU/GPU pair
+        
+        setTimeout(() => {
+            for (const cpu of cpus) {
+                for (const gpu of gpus) {
+                    if (builds.length >= resLimit) break;
+
+                    const basePrice = cpu.price + gpu.price;
+                    if (basePrice > budget) {
+                        skipped++;
+                        continue;
+                    }
+
+                    // GPU Count Logic
+                    const maxGpuForModel = getMultiGPUCap(gpu.name, gpu.length);
+                    const selectedGpuCounts = selectedOptions.gpuCounts.size > 0 ? Array.from(selectedOptions.gpuCounts) : [1];
+                    const possibleGpuCounts = selectedGpuCounts.filter(c => c <= maxGpuForModel);
+                    if (possibleGpuCounts.length === 0) continue;
+
+                    for (const gpuCnt of possibleGpuCounts) {
+                        if (gpuCnt > 1 && !gpu.multi) continue;
+                        
+                        let currentPrice = cpu.price + (gpu.price * gpuCnt);
+                        if (currentPrice > budget) continue;
+                        
+                        let totalWatts = cpu.watts + (gpu.watts * gpuCnt);
+
+                        // Find Cheapest Compatible Mobo
+                        let bestMobo = null;
+                        if (inc.mobo) {
+                            const compatMobos = mobos.filter(m => {
+                                if ((m.price + currentPrice) > budget) return false;
+                                if (m.socket !== cpu.socket) return false;
+                                if (selectedOptions.moboNames.size > 0 && !selectedOptions.moboNames.has(m.name)) return false;
+                                if (gpuCnt > 1) {
+                                    if (m.pciSlots < (gpu.isWater ? 2 : 3)) return false; 
+                                    if (gpu.sliType === 'SLI' && !m.supportSLI) return false;
+                                    if (gpu.sliType === 'Crossfire' && !m.supportCF) return false;
+                                }
+                                return true;
+                            });
+                            if (!compatMobos.length) continue;
+                            bestMobo = compatMobos.sort((a,b) => a.price - b.price)[0];
+                            currentPrice += bestMobo.price;
+                        }
+                        
+                        // Find Cheapest Compatible RAM
+                        let bestRam = null;
+                        let ramStickCount = 0;
+                        if (inc.ram) {
+                            const ramStickOptions = (document.getElementById('ramSticks').value === '0') ? [1,2,4] : [parseInt(document.getElementById('ramSticks').value)];
+                            if (bestMobo && bestMobo.size === 'Mini-ITX' && ramStickOptions.includes(4)) {
+                                ramStickOptions.splice(ramStickOptions.indexOf(4), 1);
+                            }
+                            const targetRamVal = parseInt(document.getElementById("targetRamSizeInput").value) || 0;
+const selectedRamFreqs = selectedOptions.ramFreqs;
+
+                            const rams = filteredRams.filter(ram => {
+                                if (!cpu.memTypes.includes(ram.type) || (bestMobo && bestMobo.ramType !== ram.type)) return false;
+                                if (selectedOptions.ramNames.size > 0 && !selectedOptions.ramNames.has(ram.name)) return false;
+                                if (targetRamVal > 0 && ram.totalSize !== targetRamVal) return false;
+
+                                return true;
+                            });
+
+                            let cheapestRamOption = { price: Infinity, ram: null, sticks: 0 };
+
+                            for (const ram of rams) {
+                                for (const sticks of ramStickOptions) {
+                                    if (sticks > cpu.maxMemChannels) continue;
+                                    if (selectedOptions.ramFreqs.size > 0 && !selectedOptions.ramFreqs.has(ram.freq)) continue;
+                                    
+                                    const ramPrice = ram.price * sticks;
+                                    if ((ramPrice + currentPrice) > budget) continue;
+                                    
+                                    if (ramPrice < cheapestRamOption.price) {
+                                        cheapestRamOption = { price: ramPrice, ram: ram, sticks: sticks };
+                                    }
+                                }
+                            }
+                            
+                            if (!cheapestRamOption.ram) continue;
+                            bestRam = cheapestRamOption.ram;
+                            ramStickCount = cheapestRamOption.sticks;
+                            currentPrice += bestRam.price * ramStickCount;
+                        }
+
+                        // Live CPU Score Calculation
+                        let liveCpuScore = currentMode === 'TS' ? cpu.scoreTS : cpu.scoreTSX;
+                        if (useOC && cpu.canOC === 'Yes') {
+                            const ocScoreVal = parseInt(String(cpu.ocScore).replace(/,/g, ''));
+                            if (!isNaN(ocScoreVal)) liveCpuScore = ocScoreVal;
+                        } else if (inc.ram && bestRam) {
+                            const m = currentMode;
+                            const freq = Math.min(bestRam.maxSpeed, parseInt(cpu.maxFreq) || bestRam.freq);
+                            const channels = Math.min(ramStickCount, cpu.maxMemChannels);
+                            liveCpuScore = (cpu[`coreClockMult${m}`] || 1) * 
+                                           (cpu[`mult${m}`] * freq + cpu[`memChannelMult${m}`] * channels) + cpu[`finalAdj${m}`];
+                        }
+                        
+                        const gpuScore = gpu[`score${gpuCnt > 1 ? gpuCnt : ''}`] || gpu.score;
+                        const totalScore = (gpuScore * liveCpuScore) / (gpuScore + liveCpuScore);
+
+                        if (totalScore < minScore3D) continue;
+
+                        // Find Cheapest Compatible Case
+                        let bestCase = null;
+                        if (inc.cases) {
+                            const compatCases = cases.filter(c => {
+                                if ((c.price + currentPrice) > budget) return false;
+                                if (c.maxGpuLen < gpu.length) return false;
+                                if (bestMobo && !c.moboSizes.includes(bestMobo.size)) return false;
+                                if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
+                                if (gpuCnt > 1 && c.gpuSlots < 3) return false;
+                                return true;
+                            });
+                            if (!compatCases.length) continue;
+                            bestCase = compatCases.sort((a,b) => a.price - b.price)[0];
+                            currentPrice += bestCase.price;
+                        }
+
+                        // Find Cheapest Compatible Cooler
+                        let bestCooler = null;
+                        if (inc.cooler) {
+                            const compatCoolers = coolers.filter(c => {
+                                if ((c.price + currentPrice) > budget) return false;
+                                if (!c.sockets.includes(cpu.socket)) return false;
+                                if (bestCase) {
+                                    if (c.type === 'Air Cooler' && c.height > bestCase.maxCpuHeight) return false;
+                                    if (c.type.includes('Liquid') && !bestCase.radSizes.includes(String(c.size))) return false;
+                                }
+                                return true;
+                            });
+                            if(!compatCoolers.length) continue;
+                            bestCooler = compatCoolers.sort((a,b) => a.price - b.price)[0];
+                            currentPrice += bestCooler.price;
+                        }
+
+                        // Find Cheapest Compatible PSU
+                        let bestPsu = null;
+                        if (inc.psu) {
+                            const neededWatts = totalWatts + extraWatts;
+                            const compatPsus = psus.filter(p => {
+                                if ((p.price + currentPrice) > budget) return false;
+                                if (p.watts < neededWatts) return false;
+                                if (bestCase && bestCase.maxPsuLen > 0 && p.length > bestCase.maxPsuLen) return false;
+                                return true;
+                            });
+                            if(!compatPsus.length) continue;
+                            bestPsu = compatPsus.sort((a,b) => a.price - b.price)[0];
+                            currentPrice += bestPsu.price;
+                        }
+                        
+                        // Find Cheapest Compatible Fan
+                        let bestFan = null;
+                        if (inc.fan) {
+                            const compatFans = fans.filter(f => {
+                                if ((f.price + currentPrice) > budget) return false;
+                                // Basic compatibility for now
+                                return true;
+                            });
+                            if(compatFans.length > 0) {
+                                bestFan = compatFans.sort((a,b) => a.price - b.price)[0];
+                                currentPrice += bestFan.price;
+                            }
+                        }
+
+                        // Find Selected Storage
+                        let finalStorages = [];
+                        if (inc.storage) {
+                            let storagePrice = 0;
+                            const allSelected = [...selectedOptions.ssdNames.entries(), ...selectedOptions.hddNames.entries()];
+                            
+                            for (const [name, qty] of allSelected) {
+                                const part = DB.storage.get(name);
+                                for (let i = 0; i < qty; i++) {
+                                    finalStorages.push(part);
+                                    storagePrice += part.price;
+                                }
+                            }
+                            
+                            // Validate storage against case
+                            if (bestCase) {
+                                const numSsd = finalStorages.filter(s => s.type === 'SSD' || s.type === 'M.2').length;
+                                const numHdd = finalStorages.filter(s => s.type === 'HDD').length;
+                                if (numSsd > bestCase.ssdSlots || numHdd > bestCase.hddSlots) continue;
+                            }
+
+                            currentPrice += storagePrice;
+                        }
+
+                        if (currentPrice > budget) continue;
+                        if (totalWatts > maxTotalWatts) continue;
+
+                        builds.push({
+                            id: idCounter++,
+                            cpu: cpu,
+                            gpu: gpu,
+                            gpuCnt: gpuCnt,
+                            mobo: bestMobo,
+                            ram: bestRam,
+                            ramSticks: ramStickCount,
+                            case: bestCase,
+                            cooler: bestCooler,
+                            psu: bestPsu,
+                            fan: bestFan,
+                            storages: finalStorages,
+                            price: currentPrice,
+                            watts: totalWatts + extraWatts,
+                            score: Math.round(totalScore),
+                            gpuScore: gpuScore,
+                            liveCpuScore: Math.round(liveCpuScore),
+                            diff: totalScore - targetScore
+                        });
                     }
                 }
-                
-                // 3. Sort
-                ramTiers = Array.from(bestValueBySpec.values()).sort((a,b) => {
-                    if (a.type !== b.type) return a.type.localeCompare(b.type); 
-                    if (a.freq !== b.freq) return a.freq - b.freq;
-                    if (a.size !== b.size) return a.size - b.size;
-                    return a.price - b.price;
-                });
-
-            } else {
-                ramTiers.push(null); 
             }
 
-            for (const ram of ramTiers) {
-                if (builds.length >= maxPoolSize) break;
+            resCount.innerText = `Found ${builds.length} builds.`;
+            document.getElementById('pagination').style.display = 'flex';
+            renderPage(1);
 
-                for(const sticks of stickCounts) {
-                    if (builds.length >= maxPoolSize) break;
-
-                    let ramCost = 0;
-                    if (ram) ramCost = ram.price * sticks;
-    
-                    // IMPLEMENTATION: Use LIVE score logic
-                    const liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
-                    
-                    if (liveCpuScore === 0) continue; 
-
-                    let mobo = null;
-                    if (useMobo) {
-                        const type = ram ? ram.type : (cpu.memTypes.includes('DDR4') ? 'DDR4' : 'DDR5');
-                        
-                        // Check if ANY of the selected GPU counts requires SLI
-                        const needsMulti = activeGpuCounts.some(c => c > 1);
-
-                        const found = allMobos.find(m =>
-                            m.level <= lvl &&
-                            m.socket === cpu.socket &&
-                            m.ramType === type &&
-                            (needsMulti ? m.pciSlots >= 5 : true) &&
-                            (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name))
-                        );
-                        if (!found) continue; 
-                        mobo = found; 
-                        
-                        if (sticks === 4 && mobo.size === 'Mini-ITX') continue;
-                    }
-
-                    // Loop through ALL selected GPU counts (Any, Single, Dual, etc.)
-                    for (const gpuCnt of activeGpuCounts) {
-                        if (builds.length >= maxPoolSize) break;
-
-                        for (const gpu of validGpu) {
-                            if (gpuCnt > 1) {
-                                // Whitelist Check
-                                const maxCap = getMultiGPUCap(gpu.name, gpu.length);
-                                if (maxCap < gpuCnt) continue;
-
-                                if (mobo) {
-                                    if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
-                                    if (gpu.sliType === 'Crossfire' && !mobo.supportCF) continue;
-                                }
-                            }
-
-                            // Verify Score exists for this count
-                            let gpuScore = gpuCnt === 1 ? gpu.score :
-                                          gpuCnt === 2 ? gpu.score2 :
-                                          gpuCnt === 3 ? gpu.score3 : gpu.score4;
-                            if (!gpuScore) continue;
-
-                            let bCase = null;
-                            if (useCase) {
-                                const found = allCases.find(c => {
-                                    if (c.level > lvl) return false;
-                                    if (c.maxGpuLen < gpu.length) return false;
-                                    if (mobo && !c.moboSizes.includes(mobo.size)) return false;
-                                    if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-                                    
-                                    if (gpuCnt > 1) {
-                                        if (c.gpuSlots < 3) return false;
-                                    }
-
-                                    if (requiredSSDSlots > c.ssdSlots) return false;
-                                    if (requiredHDDSlots > c.hddSlots) return false;
-
-                                    return true;
-                                });
-                                if (!found) continue;
-                                bCase = found; 
-                            }
-
-                            let cooler = null;
-                            if (useCooler) {
-                                cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
-                                if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
-                            }
-
-                            let psu = null;
-                            const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
-                            
-                            if (usePsu) {
-                                const found = allPsu.find(p => {
-                                    if (p.level > lvl) return false;
-                                    if (p.watts < totalWatts) return false;
-                                    if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
-                                    return true;
-                                });
-                                if (!found) continue;
-                                psu = found;
-                            }
-
-                            let fan = null, fanCost = 0;
-                            if (useFan && bCase) {
-                                const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
-                                if(found) {
-                                    fan = found;
-                                    fanCost = found.price;
-                                }
-                            }
-
-                            if (limitTotalW && totalWatts > limitTotalW) continue;
-
-                            let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + totalStorageCost;
-                            if (mobo) total += mobo.price;
-                            if (bCase) total += bCase.price;
-                            if (cooler) total += cooler.price;
-                            if (psu) total += psu.price;
-
-                            if (total > budget) continue;
-
-                            // Use LIVE CPU SCORE in final calc
-                            const final3D = calculate3DMark(liveCpuScore, gpuScore);
-                            if (minScore > 0 && final3D < minScore) continue;
-
-                            builds.push({
-                                score: final3D,
-                                liveCpuScore: liveCpuScore, // Store calculated score for Sorting
-                                gpuScore: gpuScore, // Store specific GPU Score for Sorting
-                                diff: final3D - target,
-                                price: total,
-                                watts: totalWatts,
-                                cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
-                                case: bCase, cooler, psu, fan, 
-                                storages: [...finalStorageList] 
-                            });
-                            
-                            if (builds.length >= maxPoolSize) break;
-                        }
-                    } // End GPU Count Loop
-                }
-            } 
-        }
-
-        // Initially sort based on selection (Optimization: do not just rely on renderPage for the first heavy lift)
-        sortBuildsArray(builds, sort);
-
-        if (builds.length > maxPoolSize) {
-            builds = builds.slice(0, maxPoolSize);
-        }
-
-        // New Score Range Logic
-        updateScoreStats(builds);
-
-        document.getElementById('resCount').innerText = `${builds.length} Builds Found`;
-        document.getElementById('pagination').style.display = builds.length > 0 ? 'flex' : 'none';
-        renderPage(1);
+        }, 10);
     }
 
-    function updateScoreStats(currentBuilds) {
-        const display = document.getElementById('scoreRangeDisplay');
-        if (!currentBuilds || currentBuilds.length === 0) {
-            display.innerText = "Lowest score in list: - | Highest Score in list: -";
-            return;
-        }
-
-        let minS = currentBuilds[0].score;
-        let maxS = currentBuilds[0].score;
-
-        for(let i=1; i<currentBuilds.length; i++) {
-            const s = currentBuilds[i].score;
-            if(s < minS) minS = s;
-            if(s > maxS) maxS = s;
-        }
-
-        display.innerText = `Lowest score in list: ${formatNumber(minS)} | Highest Score in list: ${formatNumber(maxS)}`;
-    }
-    
-    // Extracted Sort Logic so renderPage can call it instantly without regeneration
-    function sortBuildsArray(array, sortType) {
-        array.sort((a,b) => {
+    function sortBuildsArray(arr, sortType) {
+        arr.sort((a,b) => {
             if (sortType === 'score_desc') return b.score - a.score;
             if (sortType === 'score_asc') return a.score - b.score;
-            if (sortType === 'price_asc') return a.price - b.price;
             if (sortType === 'price_desc') return b.price - a.price;
-            
-            // New Individual Sorts
+            if (sortType === 'price_asc') return a.price - b.price;
             if (sortType === 'gpu_score') return b.gpuScore - a.gpuScore;
             if (sortType === 'cpu_score') return b.liveCpuScore - a.liveCpuScore;
-
             if (sortType === 'value_desc') return (b.score / b.price) - (a.score / a.price);
             if (sortType === 'value_asc') return (a.score / a.price) - (b.score / b.price);
             return Math.abs(a.diff) - Math.abs(b.diff); 
@@ -2632,6 +2495,16 @@
 
         const list = document.getElementById('resultsList');
         list.innerHTML = '';
+        const scoreDisplay = document.getElementById('scoreRangeDisplay');
+        if (builds.length > 0) {
+            const scores = builds.map(b => b.score);
+            const minScore = Math.min(...scores);
+            const maxScore = Math.max(...scores);
+            scoreDisplay.innerText = `Lowest score in list: ${formatNumber(minScore)} | Highest Score in list: ${formatNumber(maxScore)}`;
+        } else {
+            scoreDisplay.innerText = "Lowest score in list: N/A | Highest Score in list: N/A";
+        }
+
 
         slice.forEach((b, i) => {
             const diffClass = b.diff > 0 ? 'diff-pos' : 'diff-neg';
@@ -2796,6 +2669,7 @@
             list.innerHTML += html;
         });
 
+        document.getElementById('pagination').style.display = 'flex';
         const pageInfo = document.getElementById('pageInfo');
         if (!pageInfo.querySelector('input')) {
             pageInfo.innerText = `Page ${page} of ${total}`;
@@ -2887,86 +2761,58 @@
         const tbody = document.getElementById('popupTableBody');
         tbody.innerHTML = '';
 
-        let candidates = Array.from(DB[type].values());
+        let parts = Array.from(DB[type].values());
 
-        if (fitOnly) {
-            candidates = candidates.filter(part => checkFit(type, part, build));
-        }
-
+        // Search Filter
         if (searchVal) {
-            candidates = candidates.filter(part => part.name.toLowerCase().includes(searchVal));
+            parts = parts.filter(p => p.name.toLowerCase().includes(searchVal));
+        }
+        
+        // Fit Filter
+        if (fitOnly) {
+            parts = parts.filter(p => checkFit(type, p, build));
         }
 
-        candidates.sort((a,b) => {
+        // Sort
+        parts.sort((a,b) => {
+            const getVal = (p) => {
+                let diff = p.price - (originalPart ? originalPart.price : 0);
+                if (type === 'storage') diff = 0; // Not applicable for storage adds
+                return (p.score || 0) / (build.price + diff);
+            }
             if (sortMode === 'price_asc') return a.price - b.price;
             if (sortMode === 'price_desc') return b.price - a.price;
-            
-            let valA = 0;
-            let valB = 0;
-            if (type === 'cases') { valA = a.maxGpuLen; valB = b.maxGpuLen; } 
-            else if (type === 'cooler' || type === 'fan') { valA = a.flow || 0; valB = b.flow || 0; }
-            else if (type === 'storage') { valA = a.speed || 0; valB = b.speed || 0; }
-            
-            if (sortMode === 'perf_desc') return valB - valA;
-
-            let scoreA = (valA / (a.price || 1));
-            let scoreB = (valB / (b.price || 1));
-            if (sortMode === 'val_desc') return scoreB - scoreA; 
-            if (sortMode === 'val_asc') return scoreA - scoreB; 
-            
+            if (sortMode === 'perf_desc') return (b.score || b.flow || 0) - (a.score || a.flow || 0);
+            if (sortMode === 'val_desc') return getVal(b) - getVal(a);
+            if (sortMode === 'val_asc') return getVal(a) - getVal(b);
             return 0;
         });
 
-        const subset = candidates.slice(0, 100);
+        parts.forEach(p => {
+            let details = 'N/A';
+            let actionBtn = `<button class="btn-select-part" onclick="selectReplacementPart('${p.name.replace(/'/g, "\\\\'")}')">Select</button>`;
 
-        subset.forEach((p, idx) => {
-            let origPrice = originalPart ? originalPart.price : 0;
-            let newPrice = p.price;
-            
-            // Special Logic for Storage Rows
-            let actionBtn = "";
-            let diffStr = "";
-            let diffClass = "";
-
+            if (type === 'cases') details = `MaxGPU: ${p.maxGpuLen}mm | MaxCPU: ${p.maxCpuHeight}mm | Size: ${p.size}`;
+            if (type === 'cooler') details = `${p.type} | ${p.type.includes('Air') ? `H: ${p.height}mm` : `Sz: ${p.size}mm`} | Flow: ${p.flow}`;
+            if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow}`;
             if (type === 'storage') {
-                const currentDrives = build.storages || [];
-                const isSelected = currentDrives.some(d => d.name === p.name);
-                const isSSD = (p.type === 'SSD' || p.type === 'M.2');
-                
-                // Constraints (Slot Limit only)
-                const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
-                const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
-                const slotsFull = currentSameType.length >= slotCount;
-
-                // For storage popup, we show ADD/REMOVE buttons
-                if (isSelected) {
-                    // Count how many of this drive we have
-                    const count = currentDrives.filter(d => d.name === p.name).length;
-                    actionBtn = `
-                        <button class="btn-select-part selected" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', -1)">REMOVE (Has ${count})</button>
-                        ${!slotsFull ? `<button class="btn-select-part" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', 1)">ADD</button>` : ''}
-                    `;
-                } else if (slotsFull) {
-                    actionBtn = `<button class="btn-select-part" disabled title="No Slots Available">FULL</button>`;
-                } else {
-                    actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', 1)">ADD</button>`;
-                }
-                
-                diffStr = formatCurrency(p.price);
-
-            } else {
-                const diff = newPrice - origPrice;
-                diffStr = diff > 0 ? `+${formatCurrency(diff)}` : (diff < 0 ? `-${formatCurrency(Math.abs(diff))}` : '$0.00');
-                diffClass = diff > 0 ? 'val-neg' : (diff < 0 ? 'val-pos' : '');
-                const safeName = p.name.replace(/'/g, "\\'");
-                actionBtn = `<button class="btn-select-part" onclick="selectReplacementPart('${safeName}')">SELECT</button>`;
+                const count = build.storages.filter(s => s.name === p.name).length;
+                details = `${p.sizeStr} | ${p.speed} MB/s | ${p.mfgr}`;
+                actionBtn = `
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="toggleStorage('${p.name.replace(/'/g, "\\\\'")}', -1)">-</button>
+                        <span class="qty-val">${count}</span>
+                        <button class="qty-btn" onclick="toggleStorage('${p.name.replace(/'/g, "\\\\'")}', 1)">+</button>
+                    </div>
+                `;
             }
 
-            let details = '';
-            if (type === 'cases') details = `Max GPU: ${p.maxGpuLen}mm | CPU H: ${p.maxCpuHeight}mm | Size: ${p.size} | GPU Slots: ${p.gpuSlots}`;
-            if (type === 'cooler') details = `${p.type} | ${p.type.includes('Air') ? `Height: ${p.height}mm` : `Size: ${p.size}mm`} | Flow: ${p.flow}`;
-            if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow} CFM`;
-            if (type === 'storage') details = `${p.sizeStr} | ${p.type} | Level ${p.level} | ${p.speed} MB/s`;
+            const newPrice = p.price;
+            let priceDiff = newPrice - (originalPart ? originalPart.price : 0);
+            if (type === 'storage') priceDiff = 0; // Diff is handled live
+            
+            const diffClass = priceDiff > 0 ? 'val-neg' : (priceDiff < 0 ? 'val-pos' : '');
+            const diffStr = priceDiff === 0 ? '$0.00' : `${priceDiff > 0 ? '+' : ''}${formatCurrency(priceDiff)}`;
 
             const tr = document.createElement('tr');
             
