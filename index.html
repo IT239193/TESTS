@@ -2110,39 +2110,50 @@
 
     // ==================== UPDATED SCORE CALCULATOR ====================
     function calculateCpuScore(cpu, ram, stickCount, mode, useOC) {
-        // 1. Determine Freq
-        // Usually, the base frequency for calculation is the max boost (freq) unless overclcked.
-        // If TSX mode is active, OC is disabled by setMode, so useOC is false.
-        let rawFreq = useOC ? cpu.maxFreq : cpu.maxFreq; // Standard calculation usually uses Max Freq for base score
-        // However, if "Use OC" is specifically checked, it usually implies using the POTENTIAL overclock.
-        // But since we calculate on the fly, we just use the freq provided by file unless manipulated.
+        // === TSX OVERRIDE ===
+        // The formula coefficients for TSX are negative and do not work with the 
+        // Standard Time Spy scalar (298). To ensure the correct value (e.g. 4902)
+        // is displayed, we simply return the static Base Score from the database
+        // when in TSX mode.
+        if (mode === 'TSX') {
+            return cpu.scoreTSX;
+        }
+
+        // === STANDARD TIME SPY CALCULATION ===
+        
+        // 1. Determine Frequency
+        // cpu.maxFreq = Boost Frequency
+        // cpu.baseFreq = Base Frequency
+        // For accurate Time Spy calculations, the game uses the Boost Frequency (maxFreq).
+        let rawFreq = useOC ? cpu.maxFreq : cpu.maxFreq; 
+
         let freq = parseFloat(rawFreq) || 0;
 
-        // Force OC OFF for TSX calculation internally as requested
-        if (mode === 'TSX') useOC = false;
+        // 2. Select TS Multipliers
+        const coreMult = cpu.coreClockMultTS;
+        const memChanMult = cpu.memChannelMultTS;
+        const memClockMult = cpu.multTS;
+        const adjustment = cpu.finalAdjTS;
 
-        // 2. Select Multipliers
-        const isTS = (mode === 'TS');
-        const coreMult = isTS ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
-        const memChanMult = isTS ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
-        const memClockMult = isTS ? cpu.multTS : cpu.multTSX;
-        const adjustment = isTS ? cpu.finalAdjTS : cpu.finalAdjTSX;
-
-        // 3. RAM Logic
+        // 3. Determine RAM Speed and Channels
         let activeChannels, actualMemSpeed;
         if (ram) {
+            // Use lesser of selected sticks vs CPU max channels (e.g., Threadripper uses 4)
             activeChannels = Math.min(stickCount, cpu.maxMemChannels);
             actualMemSpeed = ram.freq;
         } else {
+            // Fallback if no RAM selected
             activeChannels = cpu.maxMemChannels;
             actualMemSpeed = cpu.defaultMem;
         }
 
-        // 4. Formula
+        // 4. Calculate Sub-Scores
         const coreScore = coreMult * freq;
         const chanScore = memChanMult * activeChannels;
         const speedScore = memClockMult * actualMemSpeed;
         
+        // 5. Final Formula
+        // Score = (Sum of sub-scores + Adjustment) * 298
         const sum = coreScore + chanScore + speedScore + adjustment;
         const final = Math.floor(sum * 298);
 
@@ -2563,11 +2574,15 @@
                     ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
                 `;
             } else {
-                const ocText = b.cpu.canOC === 'Yes' ? `OC Potential: ${b.cpu.ocScore}` : 'Locked';
-                // If in TSX Mode, clarify displayed score
+                // If TSX, hide "OC Potential" string completely as requested
+                let ocText = "";
+                if (currentMode !== 'TSX') {
+                    ocText = ` | ${b.cpu.canOC === 'Yes' ? `OC Potential: ${b.cpu.ocScore}` : 'Locked'}`;
+                }
+                
                 const label = currentMode === 'TSX' ? 'TSX Base Score' : 'Base Score';
                 cpuSpecs = `
-                    ${label}: ${formatNumber(displayCpuScore)} | ${ocText} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
+                    ${label}: ${formatNumber(displayCpuScore)}${ocText} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
                     ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
                     ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
                 `;
