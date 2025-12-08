@@ -677,9 +677,6 @@
         }
         .part-row.interactive:hover .btn-change { opacity: 1; }
 
-        
-
-
         /* Popup Overlay */
         #popupOverlay {
             position: fixed;
@@ -870,37 +867,21 @@
             border-radius: 4px;
         }
 
-/* Sadece RAM Models dropdown kutusunun yazısını büyütür */
-#multiRam .multi-select-display {
-    font-size: 1.4em; /* İstediğiniz boyutu buraya yazın (Örn: 1.4em) */
-}
-
+        /* Sadece RAM Models dropdown kutusunun yazısını büyütür */
+        #multiRam .multi-select-display {
+            font-size: 1.4em; 
+        }
 
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         @media (max-width: 600px) {
             .card-body { grid-template-columns: 1fr; }
-            .card-header {
-                flex-direction: column;
-                gap: 15px;
-            }
-            .header-stats {
-                text-align: left;
-                align-items: flex-start;
-            }
-            .results-meta {
-                flex-direction: column;
-                align-items: flex-start;
-            }
+            .card-header { flex-direction: column; gap: 15px; }
+            .header-stats { text-align: left; align-items: flex-start; }
+            .results-meta { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
@@ -1516,6 +1497,9 @@
                 base.voltage = get(cells, 'Voltage');
                 base.maxVoltage = get(cells, 'Max Voltage');
                 base.maxSpeed = parseInt(get(cells, 'Max Speed')) || 0;
+                // Specific extraction for RAM Manufacturer and Type pairing logic
+                base.mfgr = get(cells, 'Manufacturer');
+                if(!base.mfgr) base.mfgr = get(cells, 'Brand'); // Fallback
             } else if (type === 'mobo') {
                 base.socket = get(cells, 'CPU Socket');
                 base.ramType = get(cells, 'Ram Type');
@@ -1567,6 +1551,14 @@
         Loaded[type] = true;
         updateStatus();
         return addedCount; 
+    }
+
+    // Helper for RAM Pairing Logic: Manufacturers must match, Ram Type must match
+    function areRamsCompatible(ramA, ramB) {
+        if (!ramA || !ramB) return false;
+        if (ramA.type !== ramB.type) return false;
+        if (ramA.mfgr && ramB.mfgr && ramA.mfgr !== ramB.mfgr) return false;
+        return true;
     }
 
     function updateStatus() {
@@ -1766,7 +1758,8 @@
             if (category === 'ramNames') {
                 const r = DB.ram.get(opt);
                 if (r) {
-                    label = `<span style="font-size:1.2em">${r.name} | Size Each: ${r.size}GB | Total: ${r.totalSize}GB | ${r.type} | ${r.freq}/${r.maxSpeed} MHz | ${r.voltage}/${r.maxVoltage} V | Lvl: ${r.level}</span>`;
+                    // Include MANUFACTURER explicitly in the dropdown text
+                    label = `<span style="font-size:1.2em"><b>${r.mfgr || 'Generic'}</b> - ${r.name} | Size Each: ${r.size}GB | Total: ${r.totalSize}GB | ${r.type} | ${r.freq}/${r.maxSpeed} MHz | ${r.voltage}/${r.maxVoltage} V | Lvl: ${r.level}</span>`;
                 }
             } else if (category === 'moboNames') {
                 const m = DB.mobo.get(opt);
