@@ -564,26 +564,40 @@
         .diff-pos { color: var(--success); }
         .diff-neg { color: var(--error); }
 
-        .header-stats {
+       .header-stats {
             text-align: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
         }
+        
+        /* Wrapper to hold Watts and Price side-by-side */
+        .stats-row {
+            display: flex;
+            align-items: center;
+            gap: 15px; /* Space between Watts and Price */
+        }
+
         .price-box {
             font-size: 1.8em;
             color: var(--price-red);
             font-weight: bold;
         }
+
         .watts-box {
-            font-size: 1.1em;
+            font-size: 1.8em; /* Made Bigger (Same as price) */
             color: var(--watt-lime);
-            font-weight: 600;
-            margin-top: 5px;
+            font-weight: 800;
+            margin-top: 0; /* Removed margin */
         }
+
         .level-box {
             font-size: 0.95em;
             color: #cd853f;
             font-weight: bold;
-            margin-top: 2px;
+            margin-top: 5px;
         }
+
 
         .card-body {
             padding: 20px;
@@ -1252,6 +1266,11 @@
             <div class="input-group">
                 <label>Max GPU Watts</label>
                 <input type="number" id="maxGpuWatts" placeholder="No Limit">
+            </div>
+            <!-- NEW INPUT HERE -->
+            <div class="input-group">
+                <label>Extra Watts Buffer (OC Suggestion: ~50)</label>
+                <input type="number" id="extraWatts" value="0">
             </div>
         </div>
 
@@ -2047,6 +2066,9 @@
         const limitCpuW = parseInt(document.getElementById('maxCpuWatts').value);
         const limitGpuW = parseInt(document.getElementById('maxGpuWatts').value);
 
+        const extraW = parseInt(document.getElementById('extraWatts').value) || 0;
+
+
         const useRam = document.getElementById('incRam').checked && Loaded.ram;
         const reqSticks = parseInt(document.getElementById('ramSticks').value);
         const stickCounts = reqSticks === 0 ? [1, 2, 4] : [reqSticks];
@@ -2276,7 +2298,9 @@
                         let psu = null;
                         // Storage Wattage Approximation (e.g. 5W per drive)
                         const storageWatts = finalStorageList.length * 5; 
-                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + ramWatts + storageWatts + 50;
+                        
+                        // UPDATED FORMULA: Added extraW variable
+                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + ramWatts + storageWatts + 50 + extraW;
                         
                         if (usePsu) {
                             const found = allPsu.find(p => {
@@ -2492,9 +2516,12 @@
                         <div class="diff-box ${diffClass}">${sign}${Math.abs(Math.round(b.diff))}</div>
                     </div>
                     <div class="header-stats">
-                        <div class="price-box">${formatCurrency(b.price)}</div>
-                        <div class="watts-box">⚡ ${b.watts}W</div>
+                        <div class="stats-row">
+                            <div class="watts-box">⚡ ${b.watts}W</div>
+                            <div class="price-box">${formatCurrency(b.price)}</div>
+                        </div>
                         <div class="level-box">GPU L${b.gpu.level} | CPU L${b.cpu.level}</div>
+                    </div>
                     </div>
                 </div>
                 <div class="card-body">
