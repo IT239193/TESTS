@@ -1205,12 +1205,7 @@
                     <div class="multi-select-display" onclick="toggleDropdown('ssdDropdown')">Any</div>
                     <div id="ssdDropdown" class="multi-dropdown">
                         <div class="quick-filter-bar" id="ssdQuickFilter">
-                            <button class="filter-btn btn-clear" onclick="clearFilter('ssdNames')">Clear</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('ssd', '120')">120GB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('ssd', '240')">240GB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('ssd', '480')">480GB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('ssd', '960')">960GB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('ssd', '1920')">1.92TB</button>
+                            <button class="filter-btn btn-clear" onclick="clearFilter('ssdNames')">Clear / Show All</button>
                         </div>
                         <div class="dropdown-search-container">
                             <input type="text" class="dropdown-search" placeholder="Filter SSDs..." oninput="filterDropdownList(this)">
@@ -1227,11 +1222,7 @@
                     <div class="multi-select-display" onclick="toggleDropdown('hddDropdown')">Any</div>
                     <div id="hddDropdown" class="multi-dropdown">
                         <div class="quick-filter-bar" id="hddQuickFilter">
-                            <button class="filter-btn btn-clear" onclick="clearFilter('hddNames')">Clear</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('hdd', '1000')">1TB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('hdd', '2000')">2TB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('hdd', '4000')">4TB</button>
-                            <button class="filter-btn btn-size-filter" onclick="applyStorageSizeFilter('hdd', '8000')">8TB</button>
+                            <button class="filter-btn btn-clear" onclick="clearFilter('hddNames')">Clear / Show All</button>
                         </div>
                         <div class="dropdown-search-container">
                             <input type="text" class="dropdown-search" placeholder="Filter HDDs..." oninput="filterDropdownList(this)">
@@ -1554,15 +1545,12 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                // FIX: Use specific "Size (GB)" column to avoid parsing errors
                 let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
                 base.sizeGB = sizeVal;
                 
-                // Create clean string for buttons (e.g. 1000 -> 1TB)
                 if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
                 else base.sizeStr = sizeVal + 'GB';
 
-                // FIX: Ensure Speed is read from the correct column
                 let speedRaw = get(cells, 'Speed'); 
                 if (!speedRaw) speedRaw = get(cells, 'Transfer Speed');
                 base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
@@ -1713,34 +1701,18 @@
     }
 
     function applySizeFilter(type, sizeStr) {
-        // Logic for filters (Adds to selection)
-        // With the quantity update, maybe this just adds 1 of each fitting? 
-        // Or behaves like a filter? The user requested adding specific quantities.
-        // I will make the filter button add 1 of every drive that matches that size.
-        // Actually, that might be too many. Let's make it act as a "Add 1 of the best matching"
-        // or just highlight them?
-        // Let's make it add 1 of each to the map.
+        const containerId = type + 'ListContainer';
+        const container = document.getElementById(containerId);
+        const options = container.querySelectorAll('.multi-option');
         
-        const category = type + 'Names';
-        const fullList = type === 'ssd' ? 
-            Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
-            Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
-
-        const matchingNames = fullList.filter(s => s.sizeStr === sizeStr).map(s => s.name);
-        
-        matchingNames.forEach(name => {
-             // If not selected, select 1
-             if (!selectedOptions[category].has(name)) {
-                 selectedOptions[category].set(name, 1);
-             }
+        // Hide items that don't match the selected size
+        options.forEach(opt => {
+            if (opt.dataset.sizeStr === sizeStr) {
+                opt.style.display = 'flex';
+            } else {
+                opt.style.display = 'none';
+            }
         });
-        
-        // Re-render the dropdown to show counts
-        const listContainerId = type + 'ListContainer';
-        if(category === 'ssdNames') populateMultiSelect(category, Array.from(DB.storage.values()).filter(s=>(s.type==='SSD'||s.type==='M.2')).map(s=>s.name).sort(), listContainerId);
-        else populateMultiSelect(category, Array.from(DB.storage.values()).filter(s=>s.type==='HDD').map(s=>s.name).sort(), listContainerId);
-
-        updateDisplayLabel(category);
     }
 
     // ==================== MULTI-SELECT FUNCTIONS ====================
@@ -1777,6 +1749,9 @@
                     isSelected = true;
                     count = selectedOptions[category].get(opt);
                 }
+                // Attach sizeStr for filtering
+                const s = DB.storage.get(opt);
+                if(s) div.dataset.sizeStr = s.sizeStr;
             } else {
                 if (selectedOptions[category].has(opt)) isSelected = true;
             }
@@ -1789,7 +1764,9 @@
             
             if (category === 'ramNames') {
                 const r = DB.ram.get(opt);
-                if (r) label = `<span style="font-size:0.9em">${r.name} | ${r.totalSize}GB | ${r.type} | ${r.freq} MHz</span>`;
+                if (r) {
+                    label = `<span style="font-size:0.9em">${r.name} | Size Each: ${r.size}GB | Total: ${r.totalSize}GB | ${r.type} | ${r.freq}/${r.maxSpeed} MHz | ${r.voltage}/${r.maxVoltage} V | Lvl: ${r.level}</span>`;
+                }
             } else if (category === 'moboNames') {
                 const m = DB.mobo.get(opt);
                 if (m) label = `<span style="font-size:0.9em">${m.name} | PCI Slots: ${m.pciSlots}</span>`;
@@ -1859,9 +1836,6 @@
     }
 
     function refreshStorageDropdown(category) {
-        // Find container and re-render only the buttons/classes without clearing everything if possible, 
-        // but re-calling populate is safer for state consistency.
-        // To prevent scrolling reset, we can find specific element.
         const containerId = category === 'ssdNames' ? 'ssdListContainer' : 'hddListContainer';
         const list = (category === 'ssdNames') ? 
             Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
@@ -1932,42 +1906,6 @@
         updateDisplayLabel(category);
     }
 
-    // Storage Size Auto-Filter Function
-    function applyStorageSizeFilter(storageType, sizeGB) {
-        const category = storageType === 'ssd' ? 'ssdNames' : 'hddNames';
-        const allStorage = Array.from(DB.storage.values());
-
-        // Filter by type and size
-        const filtered = allStorage.filter(s => {
-            const isCorrectType = storageType === 'ssd' ? s.type !== 'HDD' : s.type === 'HDD';
-            const size = parseInt(s.capacity);
-            const targetSize = parseInt(sizeGB);
-
-            // Match within ±20% range
-            return isCorrectType && size >= targetSize * 0.8 && size <= targetSize * 1.2;
-        });
-
-        // Auto-open the dropdown
-        const dropdownId = storageType === 'ssd' ? 'ssdDropdown' : 'hddDropdown';
-        const dropdown = document.getElementById(dropdownId);
-        dropdown.classList.add('show');
-
-        // Filter the list
-        const listContainer = document.getElementById(storageType === 'ssd' ? 'ssdListContainer' : 'hddListContainer');
-        const options = listContainer.querySelectorAll('.multi-option');
-
-        options.forEach(opt => {
-            const name = opt.getAttribute('data-value');
-            const storage = DB.storage.get(name);
-            if (storage) {
-                const size = parseInt(storage.capacity);
-                const targetSize = parseInt(sizeGB);
-                const matches = size >= targetSize * 0.8 && size <= targetSize * 1.2;
-                opt.style.display = matches ? 'flex' : 'none';
-            }
-        });
-    }
-
     function clearFilter(category) {
         selectedOptions[category].clear();
         let containerId;
@@ -1983,9 +1921,11 @@
         else if(category === 'hddNames') containerId = 'hddListContainer';
 
         const container = document.getElementById(containerId);
-        // If storage, we need to re-render to reset counts UI
+        // If storage, we need to re-render to reset counts UI and reset Visibility (filtering)
         if (category === 'ssdNames' || category === 'hddNames') {
              refreshStorageDropdown(category);
+             // Ensure all are visible after clear
+             if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.style.display = 'flex');
         } else {
              if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.classList.remove('selected'));
         }
@@ -2465,7 +2405,7 @@
                         <span class="part-price">${formatCurrency(b.ram.price * b.ramSticks)}</span>
                     </div>
                     <div class="part-name">${b.ramSticks}x ${b.ram.name}</div>
-                    <div class="part-specs">${b.ram.name} | Size Each: ${b.ram.size || '?'}GB | Total Size: ${(b.ram.size || 0) * b.ramSticks}GB | ${b.ram.type} | Freq/Max Speed: ${b.ram.freq || '?'}/${b.ram.maxFreq || '?'} MHz | Voltage/Max Voltage: ${b.ram.voltage || '?'}/${b.ram.maxVoltage || '?'} V | Level: ${b.ram.level || '?'}</div>
+                    <div class="part-specs">${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB</div>
                 </div>`;
             }
 
