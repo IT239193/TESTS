@@ -2195,20 +2195,36 @@
 
             let ramTiers = [];
             if (useRam) {
-                const isDDR5 = cpu.memTypes.includes('DDR5');
+                // 1. Filter RAMs: Must be unlocked (level), supported by CPU (memTypes), and match filters
                 let compatibleRam = allRams.filter(r => 
                     r.level <= lvl && 
-                    (isDDR5 ? r.type === 'DDR5' : r.type === 'DDR4') &&
+                    cpu.memTypes.includes(r.type) && // Checks if CPU supports this specific RAM Type (DDR3/4/5)
                     (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name))
                 );
                 
-                const bestValueByFreq = new Map();
+                // 2. Grouping Logic: Keep cheapest stick for every unique combo of:
+                // [RAM Type] + [Manufacturer] + [Frequency] + [Size]
+                const bestValueBySpec = new Map();
                 for (const r of compatibleRam) {
-                    if (!bestValueByFreq.has(r.freq) || r.price < bestValueByFreq.get(r.freq).price) {
-                        bestValueByFreq.set(r.freq, r);
+                    const mfgr = r.mfgr || "Generic";
+                    
+                    // Unique Key. Example: "DDR4-Corsair-3200-8"
+                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
+                    
+                    // If we haven't seen this combo, or if this stick is cheaper than the last one we saw, keep it.
+                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
+                        bestValueBySpec.set(key, r);
                     }
                 }
-                ramTiers = Array.from(bestValueByFreq.values()).sort((a,b) => a.freq - b.freq);
+                
+                // 3. Sort: Type -> Frequency -> Size -> Price
+                ramTiers = Array.from(bestValueBySpec.values()).sort((a,b) => {
+                    if (a.type !== b.type) return a.type.localeCompare(b.type); 
+                    if (a.freq !== b.freq) return a.freq - b.freq;
+                    if (a.size !== b.size) return a.size - b.size;
+                    return a.price - b.price;
+                });
+
             } else {
                 ramTiers.push(null); 
             }
