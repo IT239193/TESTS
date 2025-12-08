@@ -29,7 +29,6 @@
             --brand-ram: #e0b0ff;
             --brand-aux: #e0b0ff;
             
-            /* Dark Grey for Generic/Case */
             --brand-generic: #2c3e50; 
         }
 
@@ -76,7 +75,7 @@
             font-weight: 500;
         }
 
-        /* Auto-Fetch Status Bar */
+        /* Status Bar */
         .status-bar-container {
             background: var(--bg-panel);
             border: 1px solid var(--border);
@@ -373,6 +372,8 @@
         }
         .multi-option:hover { background: rgba(52, 152, 219, 0.2); }
         .multi-option.selected { background: rgba(52, 152, 219, 0.4); }
+        
+        /* Checkbox Custom Style */
         .multi-option.selected .cb-custom {
             background: var(--accent);
             border-color: var(--accent);
@@ -393,6 +394,34 @@
             font-size: 12px;
             color: white;
             font-weight: bold;
+        }
+
+        /* NEW QUANTITY CONTROLS */
+        .qty-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: auto;
+        }
+        .qty-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .qty-btn:hover { background: var(--accent-hover); }
+        .qty-val {
+            font-weight: bold;
+            min-width: 20px;
+            text-align: center;
+            color: var(--success);
         }
 
         /* Generate Button */
@@ -506,7 +535,7 @@
             align-items: center;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-
+        
         .score-container {
             display: flex;
             align-items: center;
@@ -578,7 +607,6 @@
         .part-row.brand-ram { border-left-color: var(--brand-ram); --row-color: var(--brand-ram); }
         .part-row.brand-aux { border-left-color: var(--brand-aux); --row-color: var(--brand-aux); }
         
-        /* Updated Generic Part Style (Dark Grey/Readable) */
         .part-row.brand-generic {
             background: var(--brand-generic);
             border-left-color: #7f8c8d;
@@ -775,7 +803,6 @@
             font-weight: bold;
             font-size: 1.1em;
         }
-
         .val-pos {
             color: var(--success);
             font-weight: bold;
@@ -986,7 +1013,7 @@
             <div class="input-group">
                 <label>Include RAM</label>
                 <div class="checkbox-container">
-                    <input type="checkbox" id="incRam" checked>
+                    <input type="checkbox" id="incRam">
                     <label for="incRam">Suggest RAM</label>
                 </div>
             </div>
@@ -1019,42 +1046,32 @@
         <div class="section-header">3. Additional Components</div>
         <div class="input-grid">
             <div class="checkbox-container">
-                <input type="checkbox" id="incMobo" checked>
+                <input type="checkbox" id="incMobo">
                 <label for="incMobo">Motherboard</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incCase" checked>
+                <input type="checkbox" id="incCase">
                 <label for="incCase">Case</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incCooler" checked>
+                <input type="checkbox" id="incCooler">
                 <label for="incCooler">CPU Cooler</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incPsu" checked>
+                <input type="checkbox" id="incPsu">
                 <label for="incPsu">PSU</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incFans" checked>
+                <input type="checkbox" id="incFans">
                 <label for="incFans">Case Fans (x1)</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incStorage" checked>
+                <input type="checkbox" id="incStorage">
                 <label for="incStorage">Include Storage</label>
             </div>
         </div>
         
-        <!-- NEW STORAGE SETTINGS -->
-        <div class="input-grid" style="margin-top: 10px;">
-            <div class="input-group">
-                <label>Min SSD Size</label>
-                <input type="text" id="minSSDSize" placeholder="e.g. 500GB or 1TB">
-            </div>
-            <div class="input-group">
-                <label>Min HDD Size</label>
-                <input type="text" id="minHDDSize" placeholder="e.g. 2TB">
-            </div>
-        </div>
+        <!-- Removed Min Size Input Boxes as requested -->
 
         <div class="section-header">4. Component Filters</div>
         <div class="input-grid">
@@ -1175,9 +1192,9 @@
                 </div>
             </div>
 
-             <!-- Specific SSD Multi-Select -->
+             <!-- Specific SSD Multi-Select (WITH QTY) -->
              <div class="input-group">
-                <label>Specific SSD</label>
+                <label>Specific SSD (Use + to add)</label>
                 <div id="multiSSD" class="multi-select-container">
                     <div class="multi-select-display" onclick="toggleDropdown('ssdDropdown')">Any</div>
                     <div id="ssdDropdown" class="multi-dropdown">
@@ -1192,9 +1209,9 @@
                 </div>
             </div>
 
-            <!-- Specific HDD Multi-Select -->
+            <!-- Specific HDD Multi-Select (WITH QTY) -->
             <div class="input-group">
-                <label>Specific HDD</label>
+                <label>Specific HDD (Use + to add)</label>
                 <div id="multiHDD" class="multi-select-container">
                     <div class="multi-select-display" onclick="toggleDropdown('hddDropdown')">Any</div>
                     <div id="hddDropdown" class="multi-dropdown">
@@ -1288,9 +1305,12 @@
         moboNames: new Set(),
         caseNames: new Set(),
         ramNames: new Set(),
-        ssdNames: new Set(),
+        ssdNames: new Set(), // Now used for names (compat) but qty map is key
         hddNames: new Set()
     };
+
+    // NEW: Map to store Specific Storage Quantities: "Name" -> Count
+    const manualStorage = new Map();
 
     let lastClickedOption = { category: null, index: -1 };
 
@@ -1321,16 +1341,6 @@
     const formatNumber = num => num.toLocaleString('en-US');
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
-
-    // Helper to convert "1TB", "500GB", "500" into raw GB value
-    function parseStorageInput(str) {
-        if (!str) return 0;
-        str = str.toUpperCase().trim();
-        let val = parseFloat(str);
-        if (isNaN(val)) return 0;
-        if (str.includes('TB')) return val * 1024;
-        return val; // Default to GB
-    }
 
     // ==================== INPUT FORMATTING ====================
     ['budget', 'targetScore', 'minScoreInput', 'resLimit'].forEach(id => {
@@ -1482,7 +1492,6 @@
                 base.maxCore = get(cells, 'GPU max clock');
                 base.maxMem = get(cells, 'GPU max mem clock');
                 base.chipset = get(cells, 'Chipset');
-
             } else if (type === 'ram') {
                 base.freq = parseInt(get(cells, 'Frequency')) || 0;
                 base.type = get(cells, 'Ram Type');
@@ -1521,15 +1530,12 @@
                 base.size = parseInt(get(cells, 'Size')) || 0;
                 base.flow = parseFloat(get(cells, 'Air Flow')) || 0;
             } else if (type === 'storage') {
-                // FIX: Use specific "Size (GB)" column to avoid parsing errors
                 let sizeVal = parseFloat(get(cells, 'Size (GB)')) || 0;
                 base.sizeGB = sizeVal;
                 
-                // Create clean string for buttons (e.g. 1000 -> 1TB)
                 if (sizeVal >= 1000) base.sizeStr = (sizeVal / 1000) + 'TB';
                 else base.sizeStr = sizeVal + 'GB';
 
-                // FIX: Ensure Speed is read from the correct column
                 let speedRaw = get(cells, 'Speed'); 
                 if (!speedRaw) speedRaw = get(cells, 'Transfer Speed');
                 base.speed = parseInt((speedRaw || "0").replace(/[^0-9]/g, '')) || 0;
@@ -1630,10 +1636,10 @@
         populateMultiSelect('ramNames', rams.map(r => r.name).sort(), 'ramListContainer');
         
         // Populating SSD and HDD dropdowns
-        populateMultiSelect('ssdNames', ssdList.map(s => s.name).sort(), 'ssdListContainer');
-        populateMultiSelect('hddNames', hddList.map(s => s.name).sort(), 'hddListContainer');
+        populateMultiSelect('ssdNames', ssdList.sort((a,b) => b.price - a.price), 'ssdListContainer');
+        populateMultiSelect('hddNames', hddList.sort((a,b) => b.price - a.price), 'hddListContainer');
         
-        // Populate Size Buttons
+        // Populate Size Buttons (Helper)
         populateStorageSizeButtons('ssd', ssdList);
         populateStorageSizeButtons('hdd', hddList);
 
@@ -1680,33 +1686,23 @@
     }
 
     function applySizeFilter(type, sizeStr) {
-        const category = type + 'Names';
+        // Just filter the visible list in the dropdown
         const containerId = type + 'ListContainer';
         const container = document.getElementById(containerId);
         const options = container.querySelectorAll('.multi-option');
         
-        const fullList = type === 'ssd' ? 
-            Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
-            Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
-
-        const matchingNames = fullList.filter(s => s.sizeStr === sizeStr).map(s => s.name);
-        
-        // Add to selection
-        matchingNames.forEach(name => selectedOptions[category].add(name));
-        
-        // Visually select in dropdown
         options.forEach(opt => {
-            if(matchingNames.includes(opt.dataset.value)) {
-                opt.classList.add('selected');
-            }
+            const val = opt.dataset.sizeStr; // We will attach this in populate
+            if(val === sizeStr) opt.style.display = 'flex';
+            else opt.style.display = 'none';
         });
-
-        updateDisplayLabel(category);
     }
 
     // ==================== MULTI-SELECT FUNCTIONS ====================
     window.addEventListener('click', function(e) {
-        if (!e.target.matches('.multi-select-display') && !e.target.closest('.multi-dropdown')) {
+        if (!e.target.matches('.multi-select-display') && 
+            !e.target.closest('.multi-dropdown') &&
+            !e.target.closest('.qty-btn')) { // Don't close if clicking QTY buttons
             document.querySelectorAll('.multi-dropdown').forEach(d => d.classList.remove('show'));
         }
     });
@@ -1724,6 +1720,37 @@
         const container = document.getElementById(containerId);
         container.innerHTML = '';
         
+        // === CUSTOM RENDERER FOR STORAGE (SSD/HDD) ===
+        if (category === 'ssdNames' || category === 'hddNames') {
+            options.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'multi-option';
+                div.dataset.value = item.name;
+                div.dataset.sizeStr = item.sizeStr; // For filters
+                
+                const count = manualStorage.get(item.name) || 0;
+                if(count > 0) div.classList.add('selected');
+
+                const label = `<span style="font-size:0.9em; flex:1;">${item.name} | ${item.sizeStr} | ${item.speed} MB/s</span>`;
+
+                // Quantity UI
+                const qtyUI = `
+                    <div class="qty-controls">
+                         <span class="qty-val" id="qty_${index}_${category}" style="${count===0?'display:none':''}">${count}</span>
+                         <button class="qty-btn" onclick="updateStorageQty('${item.name.replace(/'/g, "\\'")}', 1, '${category}')">+</button>
+                         ${count > 0 ? `<button class="qty-btn" onclick="updateStorageQty('${item.name.replace(/'/g, "\\'")}', -1, '${category}')">-</button>` : ''}
+                    </div>
+                `;
+
+                div.innerHTML = label + qtyUI;
+                // We remove the default onclick for storage rows, buttons handle it
+                container.appendChild(div);
+            });
+            updateDisplayLabel(category);
+            return;
+        }
+
+        // === STANDARD RENDERER ===
         options.forEach((opt, index) => {
             const div = document.createElement('div');
             div.className = 'multi-option';
@@ -1744,11 +1771,6 @@
             } else if (category === 'caseNames') {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
-            } else if (category === 'ssdNames' || category === 'hddNames') {
-                const s = DB.storage.get(opt);
-                if (s) {
-                    label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr} | ${s.speed} MB/s</span>`;
-                }
             } else {
                 if (category === 'vram') label += ' GB';
                 if (category === 'length') label += ' mm';
@@ -1761,6 +1783,53 @@
         
         updateDisplayLabel(category);
     }
+
+    // === STORAGE QTY LOGIC ===
+    function updateStorageQty(name, delta, category) {
+        event.stopPropagation(); // Stop dropdown from closing
+        const current = manualStorage.get(name) || 0;
+        const newCount = current + delta;
+
+        if (newCount <= 0) {
+            manualStorage.delete(name);
+        } else {
+            manualStorage.set(name, newCount);
+        }
+
+        // Re-render only this category to update UI
+        // In a real app we'd target the specific row, but here we refresh the list
+        // Optimization: Find the row and update just the text
+        // But for simplicity/robustness, let's just trigger refreshDropdowns() if we need to?
+        // Actually, just re-calling populate for this specific list is better.
+        // We need the original list...
+        // Let's just find the buttons and update them in DOM to avoid scroll jump.
+        
+        const container = document.getElementById(category === 'ssdNames' ? 'ssdListContainer' : 'hddListContainer');
+        const rows = container.querySelectorAll('.multi-option');
+        rows.forEach(r => {
+            if(r.dataset.value === name) {
+                const valSpan = r.querySelector('.qty-val');
+                valSpan.textContent = newCount;
+                valSpan.style.display = newCount > 0 ? 'inline' : 'none';
+                
+                if (newCount > 0) r.classList.add('selected');
+                else r.classList.remove('selected');
+                
+                // If it was 0 and became 1, we need to add the minus button.
+                // If it was 1 and became 0, we need to remove it.
+                // Simplest way is to rebuild the qtyUI HTML for that row.
+                const qtyDiv = r.querySelector('.qty-controls');
+                qtyDiv.innerHTML = `
+                     <span class="qty-val" style="${newCount===0?'display:none':''}">${newCount}</span>
+                     <button class="qty-btn" onclick="updateStorageQty('${name.replace(/'/g, "\\'")}', 1, '${category}')">+</button>
+                     ${newCount > 0 ? `<button class="qty-btn" onclick="updateStorageQty('${name.replace(/'/g, "\\'")}', -1, '${category}')">-</button>` : ''}
+                `;
+            }
+        });
+
+        updateDisplayLabel(category);
+    }
+
 
     function toggleOption(category, value, element, event) {
         if (event.shiftKey && lastClickedOption.category === category && lastClickedOption.index !== -1) {
@@ -1817,6 +1886,23 @@
     }
 
     function clearFilter(category) {
+        if (category === 'ssdNames' || category === 'hddNames') {
+            // For storage, we clear the manual map for this type
+            // Identify which type
+            const isSSD = category === 'ssdNames';
+            // Iterate map and delete items that match this type
+            for (const [name, count] of manualStorage.entries()) {
+                 const part = DB.storage.get(name);
+                 if(part) {
+                     if(isSSD && (part.type === 'SSD' || part.type === 'M.2')) manualStorage.delete(name);
+                     if(!isSSD && part.type === 'HDD') manualStorage.delete(name);
+                 }
+            }
+            refreshDropdowns(); // Re-render to clear UI
+            updateDisplayLabel(category);
+            return;
+        }
+
         selectedOptions[category].clear();
         let containerId;
         if(category === 'cpuNames') containerId = 'cpuListContainer';
@@ -1827,8 +1913,6 @@
         else if(category === 'moboNames') containerId = 'moboListContainer';
         else if(category === 'ramNames') containerId = 'ramListContainer';
         else if(category === 'caseNames') containerId = 'caseListContainer';
-        else if(category === 'ssdNames') containerId = 'ssdListContainer';
-        else if(category === 'hddNames') containerId = 'hddListContainer';
 
         const container = document.getElementById(containerId);
         if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.classList.remove('selected'));
@@ -1851,6 +1935,23 @@
         }
 
         const display = document.getElementById(displayId).querySelector('.multi-select-display');
+
+        // Storage special label
+        if (category === 'ssdNames' || category === 'hddNames') {
+            let totalCount = 0;
+            const isSSD = category === 'ssdNames';
+            for (const [name, count] of manualStorage.entries()) {
+                const part = DB.storage.get(name);
+                if (part) {
+                    const partIsSSD = (part.type === 'SSD' || part.type === 'M.2');
+                    if (partIsSSD === isSSD) totalCount += count;
+                }
+            }
+            if (totalCount === 0) display.textContent = 'Any';
+            else display.textContent = `${totalCount} drives selected`;
+            return;
+        }
+
         const size = selectedOptions[category].size;
 
         if (size === 0) {
@@ -1861,7 +1962,7 @@
             if (category === 'length') val += ' mm';
             display.textContent = val;
         } else {
-            if (['cpuNames','gpuNames','moboNames','caseNames','ramNames','ssdNames','hddNames'].includes(category)) {
+            if (['cpuNames','gpuNames','moboNames','caseNames','ramNames'].includes(category)) {
                 display.textContent = `${size} models selected`;
             } else {
                 const arr = Array.from(selectedOptions[category]).sort((a,b) =>
@@ -1878,7 +1979,9 @@
         const container = input.closest('.multi-dropdown').querySelector('.dropdown-list-container');
         if (!container) return;
         container.querySelectorAll('.multi-option').forEach(item => {
-            item.style.display = item.textContent.toLowerCase().includes(filter) ? 'flex' : 'none';
+            const txt = item.textContent.toLowerCase();
+            // Also check data attribute for hidden values
+            item.style.display = txt.includes(filter) ? 'flex' : 'none';
         });
     }
 
@@ -1940,55 +2043,26 @@
         const useFan = document.getElementById('incFans').checked && Loaded.fan;
         const useStorage = document.getElementById('incStorage').checked && Loaded.storage;
         
-        // Read Min Size inputs
-        const minSSDVal = parseStorageInput(document.getElementById('minSSDSize').value);
-        const minHDDVal = parseStorageInput(document.getElementById('minHDDSize').value);
-
         if (useMobo) allMobos.sort((a,b) => a.price - b.price);
         if (useCase) allCases.sort((a,b) => a.price - b.price);
         if (usePsu) allPsu.sort((a,b) => a.price - b.price);
         
         // Smart Sorting Logic
         const getSmartSort = (metric) => (a, b) => {
-            // High Score -> High Perf
             if (sort === 'score_desc') return b[metric] - a[metric] || b.price - a.price;
-            // Low Score -> Low Perf
             if (sort === 'score_asc') return a[metric] - b[metric] || a.price - b.price;
-            // High Price -> High Price
             if (sort === 'price_desc') return b.price - a.price;
-            // Low Price / Diff -> Low Price
             if (sort === 'price_asc' || sort === 'diff') return a.price - b.price;
-            
-            // Value = Perf / Price
             const valA = a[metric] / (a.price || 1);
             const valB = b[metric] / (b.price || 1);
-            
-            if (sort === 'value_desc') return valB - valA; // Best Value
-            if (sort === 'value_asc') return valA - valB; // Worst Value
-            
-            return a.price - b.price; // Default
+            if (sort === 'value_desc') return valB - valA; 
+            if (sort === 'value_asc') return valA - valB; 
+            return a.price - b.price; 
         };
         
         if (useCooler) allCoolers.sort(getSmartSort('flow'));
         if (useFan) allFans.sort(getSmartSort('flow'));
-        
-        // Smart Sort: Storage
-        if (useStorage) {
-            // Priority check: If user selected specific SSDs, push them to top
-            allStorage.sort((a, b) => {
-                const isSSDA = (a.type === 'SSD' || a.type === 'M.2');
-                const isSSDB = (b.type === 'SSD' || b.type === 'M.2');
-                const selA = isSSDA ? selectedOptions.ssdNames.has(a.name) : selectedOptions.hddNames.has(a.name);
-                const selB = isSSDB ? selectedOptions.ssdNames.has(b.name) : selectedOptions.hddNames.has(b.name);
-                
-                // If one is selected and other isn't, selected wins
-                if (selA && !selB) return -1;
-                if (!selA && selB) return 1;
-                
-                // Otherwise fallback to Smart Sort
-                return getSmartSort('speed')(a, b);
-            });
-        }
+        if (useStorage) allStorage.sort(getSmartSort('speed'));
 
         const validCpu = allCpus.filter(c => {
             if (c.level > lvl) return false;
@@ -2007,13 +2081,10 @@
             if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return false;
             if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
             if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
-
-            // Strict Multi-GPU Whitelist Logic
             if (gpuCnt > 1) {
                 const maxCap = getMultiGPUCap(g.name, g.length);
                 if (maxCap < gpuCnt) return false;
             }
-
             return true;
         });
 
@@ -2074,119 +2145,84 @@
                         }
                     }
 
-                    let mobo = null;
-                    if (useMobo) {
-                        const type = ram ? ram.type : (cpu.memTypes.includes('DDR4') ? 'DDR4' : 'DDR5');
-                        const found = allMobos.find(m =>
-                            m.level <= lvl &&
-                            m.socket === cpu.socket &&
-                            m.ramType === type &&
-                            (gpuCnt > 1 ? m.pciSlots >= 5 : true) &&
-                            (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name))
-                        );
-                        if (!found) continue; 
-                        mobo = found; 
-                        
-                        if (sticks === 4 && mobo.size === 'Mini-ITX') continue;
-                    }
-
                     for (const gpu of validGpu) {
-                        // Multi GPU Compatibility Checks
-                        if (gpuCnt > 1) {
-                            if (mobo) {
-                                if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
-                                if (gpu.sliType === 'Crossfire' && !mobo.supportCF) continue;
-                            }
-                        }
-
-                        let gpuScore = gpuCnt === 1 ? gpu.score :
-                                      gpuCnt === 2 ? gpu.score2 :
-                                      gpuCnt === 3 ? gpu.score3 : gpu.score4;
+                        const gpuScore = gpuCnt === 1 ? gpu.score : (gpuCnt === 2 ? gpu.score2 : (gpuCnt === 3 ? gpu.score3 : gpu.score4));
                         if (!gpuScore) continue;
-
-                        let bCase = null;
-                        if (useCase) {
-                            const found = allCases.find(c => {
-                                if (c.level > lvl) return false;
-                                if (c.maxGpuLen < gpu.length) return false;
-                                if (mobo && !c.moboSizes.includes(mobo.size)) return false;
-                                if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-                                
-                                // Specific Multi-GPU filter
-                                if (gpuCnt > 1) {
-                                    if (c.gpuSlots < 3) return false;
-                                }
-
-                                return true;
-                            });
-                            if (!found) continue;
-                            bCase = found; 
-                        }
-
-                        let cooler = null;
-                        if (useCooler) {
-                            // Picking the first sorted cooler based on smart sort logic above
-                            cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
-                            if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
-                        }
-
-                        let storages = [];
-                        let storageCost = 0;
-                        if (useStorage) {
-                            // Logic: Pick storage based on constraints
-                            const validStorage = allStorage.filter(s => {
-                                if (s.level > lvl) return false;
-                                const isSSD = (s.type === 'SSD' || s.type === 'M.2');
-                                
-                                // NEW: Min Size Check
-                                if (isSSD && minSSDVal > 0 && s.sizeGB < minSSDVal) return false;
-                                if (!isSSD && minHDDVal > 0 && s.sizeGB < minHDDVal) return false;
-
-                                // Existing Filters
-                                if (selectedOptions.ssdNames.size > 0 && isSSD && !selectedOptions.ssdNames.has(s.name)) return false;
-                                if (selectedOptions.hddNames.size > 0 && !isSSD && !selectedOptions.hddNames.has(s.name)) return false;
-                                
-                                return true;
-                            });
-
-                            if(validStorage.length > 0) {
-                                // Due to sorting at start of function, index 0 is best fit for sort criteria
-                                const primary = validStorage[0];
-                                storages.push(primary);
-                                storageCost += primary.price;
-                            }
-                        }
-
-                        let psu = null;
-                        const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + ramWatts + 50;
-                        if (usePsu) {
-                            const found = allPsu.find(p => {
-                                if (p.level > lvl) return false;
-                                if (p.watts < totalWatts) return false;
-                                if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
-                                return true;
-                            });
-                            if (!found) continue;
-                            psu = found;
-                        }
-
-                        let fan = null, fanCost = 0;
-                        if (useFan && bCase) {
-                             // Picking the first sorted fan
-                            const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
-                            if(found) {
-                                fan = found;
-                                fanCost = found.price;
-                            }
-                        }
-
+                        
+                        let total = cpu.price + (gpu.price * gpuCnt) + ramCost;
+                        let totalWatts = (cpu.watts || 0) + ((gpu.watts || 0) * gpuCnt) + ramWatts;
+                        
                         if (limitTotalW && totalWatts > limitTotalW) continue;
 
-                        let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + storageCost;
-                        if (mobo) total += mobo.price;
-                        if (bCase) total += bCase.price;
-                        if (cooler) total += cooler.price;
-                        if (psu) total += psu.price;
+                        let mobo = null, bCase = null, cooler = null, psu = null, fan = null;
+                        
+                        if (useMobo) {
+                            const minPCI = gpuCnt > 1 ? 5 : 0;
+                            mobo = allMobos.find(m => 
+                                m.socket === cpu.socket && 
+                                (ram ? m.ramType === ram.type : true) &&
+                                m.pciSlots >= minPCI && 
+                                (gpuCnt === 2 ? (gpu.sliType === 'SLI' ? m.supportSLI : m.supportCF) : true) &&
+                                (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name))
+                            );
+                            if (mobo) total += mobo.price; else continue;
+                        }
+
+                        if (useCase) {
+                            const minGpuSlots = gpuCnt > 1 ? 3 : 0;
+                            bCase = allCases.find(c => 
+                                (mobo ? c.moboSizes.includes(mobo.size) : true) &&
+                                c.maxGpuLen >= gpu.length &&
+                                c.gpuSlots >= minGpuSlots &&
+                                (selectedOptions.caseNames.size === 0 || selectedOptions.caseNames.has(c.name))
+                            );
+                            if (bCase) total += bCase.price; else continue;
+                        }
+
+                        if (useCooler) {
+                            cooler = allCoolers.find(c => 
+                                c.sockets.includes(cpu.socket) &&
+                                (bCase ? (c.type.includes('Air') ? bCase.maxCpuHeight >= c.height : bCase.radSizes.includes(c.size.toString())) : true)
+                            );
+                            if (cooler) total += cooler.price; else continue;
+                        }
+
+                        if (usePsu) {
+                            const needed = totalWatts * 1.2; 
+                            psu = allPsu.find(p => p.watts >= needed && (bCase ? (bCase.maxPsuLen === 0 || p.length <= bCase.maxPsuLen) : true));
+                            if (psu) total += psu.price; else continue;
+                        }
+
+                        if (useFan && bCase) {
+                            fan = allFans.find(f => 
+                                (f.size === 120 && bCase.radSizes.includes('120')) || 
+                                (f.size === 140 && bCase.radSizes.includes('140'))
+                            );
+                            if (fan) total += fan.price; 
+                        }
+
+                        // === NEW STORAGE LOGIC ===
+                        let storages = [];
+                        
+                        // 1. Add specific manual selections
+                        for (const [name, count] of manualStorage.entries()) {
+                            const part = DB.storage.get(name);
+                            if(part) {
+                                for(let i=0; i<count; i++) storages.push(part);
+                            }
+                        }
+
+                        // 2. Auto Logic (only if NO manual selection AND include checkbox is ON)
+                        if (storages.length === 0 && useStorage && allStorage.length > 0) {
+                            // Pick the best drive based on sort (e.g. fastest speed)
+                            storages.push(allStorage[0]);
+                        }
+
+                        if (storages.length > 0) {
+                            total += storages.reduce((sum, s) => sum + s.price, 0);
+                        }
+                        
+                        // =========================
 
                         if (total > budget) continue;
 
@@ -2262,7 +2298,7 @@
 
             const gpuCountStr = b.gpuCnt > 1 ? `${b.gpuCnt}x ` : '';
             const gpuEmoji = b.gpu.isWater ? '💧' : '💨';
-
+            
             const usedGpuScore = b.gpuCnt === 1 ? b.gpu.score :
                                  b.gpuCnt === 2 ? b.gpu.score2 :
                                  b.gpuCnt === 3 ? b.gpu.score3 : b.gpu.score4;
@@ -2343,92 +2379,110 @@
                 const formatSize = (gb) => gb >= 1024 ? (gb/1024).toFixed(1).replace('.0','') + 'TB' : gb + 'GB';
                 
                 let parts = [];
-                if(ssdSummary.count > 0) parts.push(`${formatSize(ssdSummary.sizeGB)} SSD / ${ssdSummary.speed} MB/s`);
-                if(hddSummary.count > 0) parts.push(`${formatSize(hddSummary.sizeGB)} HDD / ${hddSummary.speed} MB/s`);
+                if(ssdSummary.count > 0) parts.push(`${ssdSummary.count}x SSD (${formatSize(ssdSummary.sizeGB)})`);
+                if(hddSummary.count > 0) parts.push(`${hddSummary.count}x HDD (${formatSize(hddSummary.sizeGB)})`);
+                
+                const title = parts.join(" + ");
+                const speed = ssdSummary.speed > 0 ? ssdSummary.speed : hddSummary.speed;
 
-                interactiveHTML += renderInteractive('Storage', 
-                    { name: "Manage Storage (" + b.storages.length + " Drives)", price: totalStoragePrice }, 
-                    buildIdx, 'storage', parts.join(" | ")
-                );
-            } else if (document.getElementById('incStorage').checked) {
-                 interactiveHTML += renderInteractive('Storage', {name: "Add Storage", price: 0}, buildIdx, 'storage', "No drives selected");
+                interactiveHTML += `
+                <div class="part-row interactive brand-generic" onclick="openSwapPopup('storage', ${buildIdx})">
+                    <button class="btn-change">CHANGE</button>
+                    <div class="part-header">
+                        <span class="part-label">Storage</span>
+                        <span class="part-price">${formatCurrency(totalStoragePrice)}</span>
+                    </div>
+                    <div class="part-name">${title}</div>
+                    <div class="part-specs">Click to manage drives individually</div>
+                </div>`;
             }
 
             if (b.case) {
-                interactiveHTML += renderInteractive('Case', b.case, buildIdx, 'cases',
-                    `Max GPU: ${b.case.maxGpuLen}mm | CPU H: ${b.case.maxCpuHeight}mm | Size: ${b.case.size} | GPU Slots: ${b.case.gpuSlots}`
-                );
+                interactiveHTML += `
+                <div class="part-row interactive brand-generic" onclick="openSwapPopup('cases', ${buildIdx})">
+                    <button class="btn-change">CHANGE</button>
+                    <div class="part-header">
+                        <span class="part-label">Case</span>
+                        <span class="part-price">${formatCurrency(b.case.price)}</span>
+                    </div>
+                    <div class="part-name">${b.case.name}</div>
+                    <div class="part-specs">Size: ${b.case.size} | Max GPU: ${b.case.maxGpuLen}mm</div>
+                </div>`;
             }
+
             if (b.cooler) {
-                interactiveHTML += renderInteractive('Cooler', b.cooler, buildIdx, 'cooler',
-                    `${b.cooler.type} | ${b.cooler.type.includes('Air') ? `Height: ${b.cooler.height}mm` : `Size: ${b.cooler.size}mm`} | Flow: ${b.cooler.flow} CFM`
-                );
+                interactiveHTML += `
+                <div class="part-row interactive brand-generic" onclick="openSwapPopup('cooler', ${buildIdx})">
+                    <button class="btn-change">CHANGE</button>
+                    <div class="part-header">
+                        <span class="part-label">Cooler</span>
+                        <span class="part-price">${formatCurrency(b.cooler.price)}</span>
+                    </div>
+                    <div class="part-name">${b.cooler.name}</div>
+                    <div class="part-specs">${b.cooler.type} | Size: ${b.cooler.size}mm | Flow: ${b.cooler.flow}</div>
+                </div>`;
             }
+
             if (b.fan) {
-                interactiveHTML += renderInteractive('Case Fans (x1)', b.fan, buildIdx, 'fan',
-                    `Size: ${b.fan.size}mm | Airflow: ${b.fan.flow} CFM`
-                );
+                interactiveHTML += `
+                <div class="part-row interactive brand-generic" onclick="openSwapPopup('fan', ${buildIdx})">
+                    <button class="btn-change">CHANGE</button>
+                    <div class="part-header">
+                        <span class="part-label">Case Fan</span>
+                        <span class="part-price">${formatCurrency(b.fan.price)}</span>
+                    </div>
+                    <div class="part-name">${b.fan.name}</div>
+                    <div class="part-specs">Size: ${b.fan.size}mm | Air Flow: ${b.fan.flow} CFM</div>
+                </div>`;
             }
 
-            const html = `
-            <div class="build-card" style="animation-delay:${i*0.02}s">
-                <div class="card-header">
-                    <div class="score-container">
-                        <span class="build-number">#${start + i + 1}</span>
-                        <div class="score-box">${formatNumber(b.score)}</div>
-                        <div class="diff-box ${diffClass}">${sign}${Math.abs(Math.round(b.diff))}</div>
+            const itemHTML = `
+                <div class="build-card">
+                    <div class="card-header">
+                        <div class="score-container">
+                            <div class="build-number">#${buildIdx + 1}</div>
+                            <div class="score-box">${formatNumber(b.score)}</div>
+                            <div class="diff-box ${diffClass}">${sign}${formatNumber(b.diff)}</div>
+                        </div>
+                        <div class="header-stats">
+                            <div class="price-box">${formatCurrency(b.price)}</div>
+                            <div class="watts-box">⚡ ${b.watts}W</div>
+                            <div class="level-box">Lvl req: ${Math.max(b.cpu.level, b.gpu.level)}</div>
+                        </div>
                     </div>
-                    <div class="header-stats">
-                        <div class="price-box">${formatCurrency(b.price)}</div>
-                        <div class="watts-box">⚡ ${b.watts}W</div>
-                        <div class="level-box">GPU L${b.gpu.level} | CPU L${b.cpu.level}</div>
+                    <div class="card-body">
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            <div class="part-row ${cpuClass} text-colored">
+                                <div class="part-header">
+                                    <span class="part-label">CPU</span>
+                                    <span class="part-price">${formatCurrency(b.cpu.price)}</span>
+                                </div>
+                                <div class="part-name">${b.cpu.name}</div>
+                                <div class="part-specs">${cpuSpecs}</div>
+                            </div>
+                            <div class="part-row ${gpuClass} text-colored">
+                                <div class="part-header">
+                                    <span class="part-label">GPU</span>
+                                    <span class="part-price">${formatCurrency(b.gpu.price * b.gpuCnt)}</span>
+                                </div>
+                                <div class="part-name">${gpuCountStr}${b.gpu.name}</div>
+                                <div class="part-specs">${gpuSpecs}</div>
+                            </div>
+                            ${ramHTML}
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            ${auxHTML}
+                            ${interactiveHTML}
+                        </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="part-row ${gpuClass} text-colored">
-                        <div class="part-header">
-                            <span class="part-label" style="font-size: 1.5em; font-weight: 900;">${gpuCountStr}GPU</span>
-                            <span class="part-price">${formatCurrency(b.gpu.price * b.gpuCnt)}</span>
-                        </div>
-                        <div class="part-name">${b.gpu.name}</div>
-                        <div class="part-specs">${gpuSpecs}</div>
-                    </div>
-                    <div class="part-row ${cpuClass} text-colored">
-                        <div class="part-header">
-                            <span class="part-label">CPU</span>
-                            <span class="part-price">${formatCurrency(b.cpu.price)}</span>
-                        </div>
-                        <div class="part-name">${b.cpu.name}</div>
-                        <div class="part-specs">${cpuSpecs}</div>
-                    </div>
-                    ${ramHTML}
-                    ${auxHTML}
-                    ${interactiveHTML}
-                </div>
-            </div>`;
-            list.innerHTML += html;
+            `;
+            list.innerHTML += itemHTML;
         });
-
-        const pageInfo = document.getElementById('pageInfo');
-        if (!pageInfo.querySelector('input')) {
-            pageInfo.innerText = `Page ${page} of ${total}`;
-        }
-        document.getElementById('btnPrev').disabled = (page === 1);
-        document.getElementById('btnNext').disabled = (page === total || total === 0);
-    }
-
-    function renderInteractive(label, part, bIdx, type, specs) {
-        let price = part.price;
-        return `
-        <div class="part-row interactive brand-generic" onclick="openSwapPopup('${type}', ${bIdx})">
-            <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
-            <div class="part-header">
-                <span class="part-label">${label}</span>
-                <span class="part-price">${formatCurrency(price)}</span>
-            </div>
-            <div class="part-name">${part.name}</div>
-            <div class="part-specs">${specs}</div>
-        </div>`;
+        
+        document.getElementById('pageInfo').innerText = `Page ${page} of ${total}`;
+        document.getElementById('btnPrev').disabled = page <= 1;
+        document.getElementById('btnNext').disabled = page >= total;
     }
 
     function changePage(d) {
@@ -2468,7 +2522,7 @@
         if (type === 'fan') original = build.fan;
         else if (type === 'cases') original = build.case;
         else if (type === 'cooler') original = build.cooler;
-        else if (type === 'storage') original = null; // Storage uses array logic
+        else if (type === 'storage') original = null; 
 
         currentPopupData = {
             type,
@@ -2546,11 +2600,10 @@
                 const isSelected = currentDrives.some(d => d.name === p.name);
                 const isSSD = (p.type === 'SSD' || p.type === 'M.2');
                 
-                // Constraints (Slot Limit only)
                 const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
                 const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
                 const slotsFull = currentSameType.length >= slotCount;
-
+                
                 if (isSelected) {
                     actionBtn = `<button class="btn-select-part selected" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}')">REMOVE</button>`;
                 } else if (slotsFull) {
@@ -2667,7 +2720,6 @@
         }
 
         if (type === 'storage') {
-            // Simplified compatibility check (Slots & Mfg check happen in button logic)
             return true;
         }
 
