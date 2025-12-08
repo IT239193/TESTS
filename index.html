@@ -2452,10 +2452,18 @@ function setMode(m) {
                     let ramCost = 0;
                     if (ram) ramCost = ram.price * sticks;
     
-                    // IMPLEMENTATION: Use LIVE score logic
-                    const liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
-                    
-                    if (liveCpuScore === 0) continue; // Skip invalid configs
+                    // IMPLEMENTATION: Use LIVE score logic (but TSX uses static scores)
+let liveCpuScore;
+
+if (currentMode === 'TSX') {
+    // TSX Mode: Always use static base score, ignore RAM/OC
+    liveCpuScore = cpu.scoreTSX;
+} else {
+    // TS Mode: Use live calculation
+    liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC);
+}
+
+if (liveCpuScore === 0) continue; // Skip invalid configs
 
                     let mobo = null;
                     if (useMobo) {
