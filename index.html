@@ -48,6 +48,42 @@
 
         .container { max-width: 1800px; margin: 0 auto; padding-bottom: 100px; }
 
+        /* Loading Overlay */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 15, 30, 0.95);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            transition: opacity 0.5s ease;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(52, 152, 219, 0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loadingText {
+            font-size: 1.5em;
+            color: var(--accent);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
         /* Header */
         header {
             text-align: center;
@@ -75,71 +111,6 @@
             margin-top: 5px;
             font-weight: 500;
         }
-
-        /* Auto-Fetch Status Bar */
-        .status-bar-container {
-            background: var(--bg-panel);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 30px;
-        }
-
-        .status-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 10px;
-        }
-
-        .status-title {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .file-status-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .file-tag {
-            background: #2c3e50;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-weight: bold;
-            border: 1px solid #444;
-            color: #7f8c8d;
-            transition: 0.3s;
-            font-size: 0.9em;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .file-tag.loaded {
-            background: rgba(46, 204, 113, 0.15);
-            border-color: var(--success);
-            color: var(--success);
-        }
-        .file-tag.error {
-            background: rgba(231, 76, 60, 0.15);
-            border-color: var(--error);
-            color: var(--error);
-        }
-        .file-tag.loading {
-            background: rgba(52, 152, 219, 0.15);
-            border-color: var(--accent);
-            color: var(--accent);
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
         /* Controls */
         .controls-wrapper {
@@ -571,11 +542,10 @@
             align-items: flex-end;
         }
         
-        /* Wrapper to hold Watts and Price side-by-side */
         .stats-row {
             display: flex;
             align-items: center;
-            gap: 15px; /* Space between Watts and Price */
+            gap: 15px; 
         }
 
         .price-box {
@@ -585,10 +555,10 @@
         }
 
         .watts-box {
-            font-size: 1.8em; /* Made Bigger (Same as price) */
+            font-size: 1.8em;
             color: var(--watt-lime);
             font-weight: 800;
-            margin-top: 0; /* Removed margin */
+            margin-top: 0; 
         }
 
         .level-box {
@@ -625,7 +595,6 @@
         .part-row.brand-ram { border-left-color: var(--brand-ram); --row-color: var(--brand-ram); }
         .part-row.brand-aux { border-left-color: var(--brand-aux); --row-color: var(--brand-aux); }
         
-        /* Updated Generic Part Style (Dark Grey/Readable) */
         .part-row.brand-generic {
             background: var(--brand-generic);
             border-left-color: #7f8c8d;
@@ -707,6 +676,51 @@
             cursor: pointer;
         }
         .part-row.interactive:hover .btn-change { opacity: 1; }
+
+        /* ================= COMPACT MODE CSS ================= */
+        #resultsList.compact-mode .build-card {
+            border-left-width: 4px;
+            min-height: auto;
+        }
+        #resultsList.compact-mode .card-header {
+            padding: 8px 15px;
+            justify-content: space-between;
+        }
+        #resultsList.compact-mode .score-container,
+        #resultsList.compact-mode .watts-box,
+        #resultsList.compact-mode .level-box,
+        #resultsList.compact-mode .part-specs,
+        #resultsList.compact-mode .part-price, 
+        #resultsList.compact-mode .part-label,
+        #resultsList.compact-mode .btn-change {
+            display: none !important;
+        }
+        #resultsList.compact-mode .header-stats {
+            flex-direction: row;
+        }
+        #resultsList.compact-mode .part-row {
+            padding: 6px 10px;
+            margin-bottom: 2px;
+            border-left-width: 3px;
+        }
+        #resultsList.compact-mode .part-name {
+            font-size: 1.0em;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #resultsList.compact-mode .part-header {
+            margin: 0;
+            height: 0; /* Effectively hide header in row but keep it in DOM */
+            display: none;
+        }
+        #resultsList.compact-mode .card-body {
+            gap: 6px;
+            padding: 8px 15px;
+            grid-template-columns: 1fr 1fr;
+        }
+
 
         /* Popup Overlay */
         #popupOverlay {
@@ -928,6 +942,12 @@
 </head>
 <body>
 
+<!-- Loading Screen -->
+<div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div id="loadingText">Connecting to Database...</div>
+</div>
+
 <!-- Popup Overlay for Part Swapping -->
 <div id="popupOverlay" onclick="closePopup()"></div>
 <div id="popupContainer">
@@ -974,20 +994,6 @@
         <h1>PCBS2 Ultimate Builder</h1>
         <div class="header-subtitle">contact me on discord for bug reports @timmy2131_</div>
     </header>
-
-    <div class="status-bar-container">
-        <div class="status-header">
-            <div class="status-title">
-                <span>📁 Data Source: "datas/" folder</span>
-            </div>
-        </div>
-        <div class="file-status-container" id="fileStatus">
-            <div style="color:#777; font-style:italic;">Initializing data fetch...</div>
-        </div>
-        <div style="margin-top:10px; font-size:0.9em; color:#666;">
-            Note: Ensure you are running this file via a local server (e.g., Live Server) to allow file fetching.
-        </div>
-    </div>
 
     <div class="controls-wrapper" id="controls">
         <div class="section-header">1. Benchmarking & Goals</div>
@@ -1066,39 +1072,31 @@
         <div class="section-header">3. Additional Components</div>
         <div class="input-grid">
             <div class="checkbox-container">
-                <!-- CHANGE 1: Added 'checked' to Motherboard -->
                 <input type="checkbox" id="incMobo" checked> 
                 <label for="incMobo">Motherboard</label>
             </div>
             <div class="checkbox-container">
-                <!-- Case stays checked -->
                 <input type="checkbox" id="incCase" checked>
                 <label for="incCase">Case</label>
             </div>
             <div class="checkbox-container">
-                <!-- CHANGE 2: Removed 'checked' from CPU Cooler -->
                 <input type="checkbox" id="incCooler">
                 <label for="incCooler">CPU Cooler</label>
             </div>
             <div class="checkbox-container">
-                <!-- PSU stays checked -->
                 <input type="checkbox" id="incPsu" checked>
                 <label for="incPsu">PSU</label>
             </div>
             <div class="checkbox-container">
-                <!-- Fans stay unchecked -->
                 <input type="checkbox" id="incFans"> 
                 <label for="incFans">Case Fans (x1)</label>
             </div>
             <div class="checkbox-container">
-                <!-- Storage stays unchecked -->
                 <input type="checkbox" id="incStorage"> 
                 <label for="incStorage">Include Storage</label>
             </div>
         </div>
         
-        <!-- REMOVED MIN SSD/HDD INPUTS HERE -->
-
         <div class="section-header">4. Component Filters</div>
         <div class="input-grid">
             <!-- CPU Socket Multi-Select -->
@@ -1267,7 +1265,6 @@
                 <label>Max GPU Watts</label>
                 <input type="number" id="maxGpuWatts" placeholder="No Limit">
             </div>
-            <!-- NEW INPUT HERE -->
             <div class="input-group">
                 <label>Extra Watts Buffer (OC Suggestion: ~50)</label>
                 <input type="number" id="extraWatts" value="0">
@@ -1281,6 +1278,12 @@
     <div class="results-meta">
         <div class="result-count" id="resCount">Ready</div>
         <div class="sort-controls">
+            <!-- Compact View Toggle -->
+            <div class="checkbox-container" style="background:transparent; border:none; padding:0;">
+                <input type="checkbox" id="compactMode" onchange="toggleCompactMode()">
+                <label for="compactMode">Compact View</label>
+            </div>
+
             <label>Sort By:</label>
             <select id="mainSort" class="sort-select" onchange="renderPage(1)">
                 <option value="diff">Closest to Target Score</option>
@@ -1371,6 +1374,16 @@
     const parseVal = id => parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
     const parseIntVal = id => parseInt(document.getElementById(id).value.replace(/,/g, '')) || 0;
 
+    function toggleCompactMode() {
+        const isCompact = document.getElementById('compactMode').checked;
+        const list = document.getElementById('resultsList');
+        if (isCompact) {
+            list.classList.add('compact-mode');
+        } else {
+            list.classList.remove('compact-mode');
+        }
+    }
+
     // Helper to convert "1TB", "500GB", "500" into raw GB value
     function parseStorageInput(str) {
         if (!str) return 0;
@@ -1407,9 +1420,6 @@
         Object.keys(DB).forEach(k => DB[k].clear());
         Object.keys(Loaded).forEach(k => Loaded[k] = false);
 
-        const statusContainer = document.getElementById('fileStatus');
-        statusContainer.innerHTML = ''; 
-
         const targets = [
             { id: 'cpu',       file: 'CPU.txt',              label: 'CPU' },
             { id: 'gpu',       file: 'GPU.txt',              label: 'GPU' },
@@ -1423,32 +1433,30 @@
             { id: 'storage',   file: 'Storage.txt',          label: 'Storage' }
         ];
 
-        const statusEls = {};
-        targets.forEach(t => {
-            const el = document.createElement('div');
-            el.className = 'file-tag loading';
-            el.innerHTML = `${t.label} ⏳`;
-            statusContainer.appendChild(el);
-            statusEls[t.id] = el;
-        });
+        const loadingText = document.getElementById('loadingText');
 
         for (const t of targets) {
+            loadingText.innerText = `Fetching ${t.label}...`;
             try {
                 const response = await fetch(`datas/${t.file}`);
                 if (!response.ok) throw new Error(`Status ${response.status}`);
                 const text = await response.text();
                 
-                const addedCount = parseHTML(t.file, text);
-
-                statusEls[t.id].className = 'file-tag loaded';
-                statusEls[t.id].innerHTML = `${t.label} ✓ (${addedCount})`;
+                parseHTML(t.file, text);
 
             } catch (err) {
                 console.warn(`Could not load ${t.file}:`, err);
-                statusEls[t.id].className = 'file-tag error';
-                statusEls[t.id].innerHTML = `${t.label} ❌ (Missing)`;
             }
         }
+
+        // All done
+        loadingText.innerText = "Processing Data...";
+        setTimeout(() => {
+             document.getElementById('loadingOverlay').style.opacity = '0';
+             setTimeout(() => {
+                 document.getElementById('loadingOverlay').style.display = 'none';
+             }, 500);
+        }, 500);
     }
 
     // ==================== FILE PARSING ====================
@@ -2393,6 +2401,13 @@ let psu = null;
         const total = Math.ceil(builds.length / itemsPerPage);
 
         const list = document.getElementById('resultsList');
+        // Apply compact mode if checked
+        if (document.getElementById('compactMode').checked) {
+             list.classList.add('compact-mode');
+        } else {
+             list.classList.remove('compact-mode');
+        }
+
         list.innerHTML = '';
 
         slice.forEach((b, i) => {
