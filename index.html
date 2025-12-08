@@ -1052,27 +1052,33 @@
         <div class="section-header">3. Additional Components</div>
         <div class="input-grid">
             <div class="checkbox-container">
-                <input type="checkbox" id="incMobo"> <!-- Unchecked Default -->
+                <!-- CHANGE 1: Added 'checked' to Motherboard -->
+                <input type="checkbox" id="incMobo" checked> 
                 <label for="incMobo">Motherboard</label>
             </div>
             <div class="checkbox-container">
+                <!-- Case stays checked -->
                 <input type="checkbox" id="incCase" checked>
                 <label for="incCase">Case</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incCooler" checked>
+                <!-- CHANGE 2: Removed 'checked' from CPU Cooler -->
+                <input type="checkbox" id="incCooler">
                 <label for="incCooler">CPU Cooler</label>
             </div>
             <div class="checkbox-container">
+                <!-- PSU stays checked -->
                 <input type="checkbox" id="incPsu" checked>
                 <label for="incPsu">PSU</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incFans"> <!-- Unchecked Default -->
+                <!-- Fans stay unchecked -->
+                <input type="checkbox" id="incFans"> 
                 <label for="incFans">Case Fans (x1)</label>
             </div>
             <div class="checkbox-container">
-                <input type="checkbox" id="incStorage"> <!-- Unchecked Default -->
+                <!-- Storage stays unchecked -->
+                <input type="checkbox" id="incStorage"> 
                 <label for="incStorage">Include Storage</label>
             </div>
         </div>
