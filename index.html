@@ -2667,34 +2667,31 @@
                     
                     if (allSpeeds.length === 0) continue; // Safety check
 
-                    // Select 3 tiers using "2 Above, 1 Below" strategy
+                    // Select up to 10 tiers above/at target, 10 tiers below target (20 max)
                     let selectedSpeeds = [];
+                    const maxAboveTiers = 10;
+                    const maxBelowTiers = 10;
                     
                     // Find speeds at or above target
                     const atOrAbove = allSpeeds.filter(s => s >= targetSpeed);
                     // Find speeds below target
                     const below = allSpeeds.filter(s => s < targetSpeed);
                     
-                    if (atOrAbove.length >= 2) {
-                        // Ideal case: at least 2 tiers at/above target
-                        selectedSpeeds.push(atOrAbove[0]); // Closest to target
-                        selectedSpeeds.push(atOrAbove[1]); // Next tier up
-                        if (below.length > 0) {
-                            selectedSpeeds.push(below[below.length - 1]); // Closest below
-                        }
-                    } else if (atOrAbove.length === 1) {
-                        // Only 1 tier at/above target
-                        selectedSpeeds.push(atOrAbove[0]);
-                        if (below.length > 0) {
-                            selectedSpeeds.push(below[below.length - 1]); // Closest below
-                            if (below.length > 1) {
-                                selectedSpeeds.push(below[below.length - 2]); // Second closest below
-                            }
-                        }
-                    } else {
-                        // No tiers at/above target (all below)
-                        // Take top 3 highest speeds available
-                        selectedSpeeds = below.slice(-3);
+                    // Take up to 10 tiers at/above target
+                    if (atOrAbove.length > 0) {
+                        const numAbove = Math.min(atOrAbove.length, maxAboveTiers);
+                        selectedSpeeds.push(...atOrAbove.slice(0, numAbove));
+                    }
+                    
+                    // Take up to 10 tiers below target (highest ones = closest to target)
+                    if (below.length > 0) {
+                        const numBelow = Math.min(below.length, maxBelowTiers);
+                        selectedSpeeds.push(...below.slice(-numBelow));
+                    }
+                    
+                    // If still no tiers selected (edge case), take all available
+                    if (selectedSpeeds.length === 0 && allSpeeds.length > 0) {
+                        selectedSpeeds = allSpeeds.slice();
                     }
 
                     // For each selected speed tier, pick the cheapest motherboard
