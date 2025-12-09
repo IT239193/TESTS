@@ -2541,7 +2541,7 @@
 
                     let mobo = null;
                     if (useMobo) {
-                        const type = ram ? ram.type : (cpu.memTypes.includes('DDR4') ? 'DDR4' : 'DDR5');
+                        const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
                         const maxSelectedGpu = Math.max(...selectedGpuCounts);
                         const minPci = maxSelectedGpu > 1 ? 5 : 0;
                         const found = allMobos.find(m =>
