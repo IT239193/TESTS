@@ -961,14 +961,16 @@
             color: white;
             border-color: var(--accent);
         }
-        .data-list-row {
+.data-list-row {
             background: rgba(255,255,255,0.03);
-            margin-bottom: 5px;
-            padding: 8px;
-            border-left: 3px solid #555;
-            word-break: break-all;
+            margin-bottom: 8px;
+            padding: 15px;      /* Increased padding */
+            border-left: 4px solid #555;
+            word-wrap: break-word; /* Prevents text cutoff */
+            white-space: normal;   /* Allows text to wrap to new lines */
             font-family: 'Consolas', monospace;
-            font-size: 13px;
+            font-size: 14px;    /* Increased font size */
+            line-height: 1.6;   /* Better spacing */
         }
         .data-list-row:hover { background: rgba(255,255,255,0.1); }
         .data-list-row.brand-amd { border-left-color: var(--brand-amd); }
@@ -1847,13 +1849,13 @@
             let str = "";
             
             if (currentDataTab === 'gpu') {
-                // GPU FORMAT: Single GPU Score: | Double GPU Score | Triple GPU Score | Quad GPU Score | VRAM | Length | Watt | Air | Base Core/Max Core: 2400/2600 MHz | Base Mem/Max Mem: 2500/2750 MHz | Level | Price | Sell Price | Slot size: |
+                // GPU FORMAT
                 const cooling = item.isWater ? "Water" : "Air";
                 str = `Single GPU Score: ${item.rawScore || ""} | Double GPU Score ${item.rawScore2 || ""} | Triple GPU Score ${item.rawScore3 || ""} | Quad GPU Score ${item.rawScore4 || ""} | VRAM ${item.vram} | Length ${item.length} | Watt ${item.watts} | ${cooling} | Base Core/Max Core: ${item.baseCore || "?"}/${item.maxCore || "?"} MHz | Base Mem/Max Mem: ${item.baseMem || "?"}/${item.maxMem || "?"} MHz | Level ${item.level} | Price ${item.price} | Sell Price ${item.sellPrice} | Slot size: ${item.slotSize} |`;
             } else {
-                // CPU FORMAT: Basic Cpu Score: | Basic CPU Score (TSX): | OC Score: | Socket | 12 Cores | BaseMidMaxFreq: 3800 / 4200 / 4600 MHz | VoltageMinMax: 1.35/1.5 V | Can Delid (value) | Sell Price : | Price | Level | Max Memory Channels: | Supported Memory Types (value)
+                // CPU FORMAT - Added "C" after item.cores
                 const freqStr = `${item.baseFreq || "?"} / ${item.freqMid || "?"} / ${item.maxFreq || "?"}`;
-                str = `Basic Cpu Score: ${item.scoreTS} | Basic CPU Score (TSX): ${item.scoreTSX} | OC Score: ${item.ocScore} | Socket ${item.socket} | ${item.cores} | BaseMidMaxFreq: ${freqStr} MHz | VoltageMinMax: ${item.voltage || "?"}/${item.maxVoltage || "?"} V | Can Delid ${item.canDelid} | Sell Price : ${item.sellPrice} | Price ${item.price} | Level ${item.level} | Max Memory Channels: ${item.maxMemChannelsRaw || "?"} | Supported Memory Types ${item.memTypes}`;
+                str = `Basic Cpu Score: ${item.scoreTS} | Basic CPU Score (TSX): ${item.scoreTSX} | OC Score: ${item.ocScore} | Socket ${item.socket} | ${item.cores}C | BaseMidMaxFreq: ${freqStr} MHz | VoltageMinMax: ${item.voltage || "?"}/${item.maxVoltage || "?"} V | Can Delid ${item.canDelid} | Sell Price : ${item.sellPrice} | Price ${item.price} | Level ${item.level} | Max Memory Channels: ${item.maxMemChannelsRaw || "?"} | Supported Memory Types ${item.memTypes}`;
             }
 
             div.innerHTML = `<span class="item-name-list">${item.name}</span><span class="raw-string">${str}</span>`;
