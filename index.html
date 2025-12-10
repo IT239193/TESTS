@@ -2430,7 +2430,8 @@
         return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
     }
 
-    function generateBuilds() {
+   
+function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for CPU and GPU files to load from datas/ folder!");
         
         const targetRamVal = parseIntVal('targetTotalRam');
@@ -2621,7 +2622,7 @@
                         if (ram && (ram.size * sticks) !== targetRamVal) continue;
                     }
 
-                    // 1. SELECT MOTHERBOARD CANDIDATES (Exhaustive Speed Search)
+                    // 1. SELECT MOTHERBOARD CANDIDATES (TRUE EXHAUSTIVE MODE)
                     let moboTiers = [];
                     if (useMobo) {
                         const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
@@ -2629,6 +2630,7 @@
                         const minPci = maxSelectedGpu > 1 ? 5 : 0;
                         
                         // A. Find ALL fitting motherboards based on physical/socket constraints
+                        // We DO NOT filter by price, groupings, or anything else. Just compatibility.
                         let candidates = allMobos.filter(m =>
                             m.level <= lvl &&
                             m.socket === cpu.socket &&
@@ -2640,37 +2642,14 @@
 
                         if (candidates.length === 0) continue;
 
-                        // B. Group by the relevant Speed Property
-                        // If XMP is ON, we separate boards by their Max Speed.
-                        // If XMP is OFF, we separate boards by their Default Speed.
-                        const speedProperty = useXMP ? 'maxMemSpeed' : 'defaultMemSpeed';
-                        
-                        // Use a Map to bucket boards:  Speed -> Array of Boards
-                        const speedMap = new Map();
-                        
-                        candidates.forEach(m => {
-                            let s = m[speedProperty] || 0;
-                            if (!speedMap.has(s)) speedMap.set(s, []);
-                            speedMap.get(s).push(m);
-                        });
-
-                        // C. Select Representative Boards for EACH Speed Tier
-                        // This ensures "Every Possibility" is tested. 
-                        let uniqueSpeeds = Array.from(speedMap.keys()).sort((a,b) => a-b);
-                        
-                        uniqueSpeeds.forEach(speed => {
-                            let boardsAtThisSpeed = speedMap.get(speed);
-                            // Sort by price to get the best value for this specific speed tier
-                            boardsAtThisSpeed.sort((a,b) => a.price - b.price);
-                            // Push the cheapest board of this specific speed
-                            moboTiers.push(boardsAtThisSpeed[0]);
-                        });
+                        // B. Assign ALL candidates to the loop array
+                        moboTiers = candidates;
 
                     } else {
                         moboTiers.push(null); // No motherboard case
                     }
 
-                    // Loop through the selected Motherboard Tiers
+                    // Loop through EVERY motherboard that fits
                     for (const mobo of moboTiers) {
                         if (builds.length >= maxPoolSize) break;
 
@@ -2789,7 +2768,7 @@
                                 if (builds.length >= maxPoolSize) break;
                             }
                         }
-                    } // End motherboard tiers loop
+                    } // End motherboard loop
                 }
             } 
         }
@@ -2817,6 +2796,7 @@
         document.getElementById('pagination').style.display = builds.length > 0 ? 'flex' : 'none';
         renderPage(1);
     }
+    
     
     function sortBuildsArray(array, sortType) {
         array.sort((a,b) => {
