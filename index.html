@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Live Calculator</title>
+    <title>PCBS2 Ultimate Pro Builder - Live Calculator (Debug Mode)</title>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -1077,6 +1078,23 @@
             line-height: 1.5;
         }
 
+        /* DEBUG CONSOLE */
+        .debug-console {
+            background: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            padding: 15px;
+            border: 2px solid #555;
+            border-radius: 8px;
+            margin-top: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            display: none;
+            font-size: 12px;
+        }
+        .debug-console.show { display: block; }
+
         @media (max-width: 600px) {
             .card-body { grid-template-columns: 1fr; }
             .card-header { flex-direction: column; gap: 15px; }
@@ -1491,6 +1509,7 @@
             </div>
             
             <button class="btn-generate" onclick="generateBuilds()">GENERATE BUILDS</button>
+            <div id="debugConsole" class="debug-console"></div>
         </div>
 
         <!-- Results Meta Bar -->
@@ -1612,6 +1631,30 @@
     // Internal toggles for additional background sorting
     const PRECALC_GPU_SORT = false; 
     const PRECALC_CPU_SORT = false;
+
+    // Debugging Globals
+    let debugLines = [];
+
+    function debugClear() {
+        debugLines = [];
+        const consoleEl = document.getElementById('debugConsole');
+        if (consoleEl) {
+            consoleEl.innerHTML = '';
+            consoleEl.style.display = 'none';
+        }
+    }
+
+    function debugLog(msg) {
+        const time = new Date().toLocaleTimeString();
+        const line = `[${time}] ${msg}`;
+        debugLines.push(line);
+        const consoleEl = document.getElementById('debugConsole');
+        if (consoleEl) {
+            consoleEl.style.display = 'block';
+            consoleEl.innerText = debugLines.join('\n');
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+    }
 
     // UPDATED: Only updates visual state, DOES NOT start a scan
     function setToggle(type, state) {
@@ -2472,6 +2515,9 @@
         }
 
         const map = new Map();
+        let skippedCount = 0;
+        let skippedExamples = [];
+
         allMobos.forEach(m => {
             if (m.level > lvl) return;
 
@@ -2479,10 +2525,24 @@
             const key = `${m.socket}|${m.ramType}|${m.size}|${m.pciSlots}|${m.maxMemSpeed}|${m.supportSLI}|${m.supportCF}`;
             
             // Keep the cheapest one in this group
-            if (!map.has(key) || m.price < map.get(key).price) {
+            if (!map.has(key)) {
                 map.set(key, m);
+            } else {
+                const existing = map.get(key);
+                if (m.price < existing.price) {
+                    skippedExamples.push(existing.name);
+                    map.set(key, m); // Replace with cheaper
+                } else {
+                    skippedExamples.push(m.name);
+                }
+                skippedCount++;
             }
         });
+
+        if (skippedCount > 0) {
+            const ex = skippedExamples.slice(0, 3).join(", ");
+            debugLog(`[OPTIMIZATION] Skipped ${skippedCount} duplicate-spec Motherboards to speed up scan. (e.g. ${ex}...)`);
+        }
 
         return Array.from(map.values()).sort((a,b) => a.price - b.price);
     }
@@ -2499,6 +2559,9 @@
         }
 
         const map = new Map();
+        let skippedCount = 0;
+        let skippedExamples = [];
+
         allGpus.forEach(g => {
             if (g.level > lvl) return;
             if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return;
@@ -2509,10 +2572,24 @@
             // but usually identical cards have similar lengths.
             const key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}`;
             
-            if (!map.has(key) || g.price < map.get(key).price) {
+            if (!map.has(key)) {
                 map.set(key, g);
+            } else {
+                const existing = map.get(key);
+                if (g.price < existing.price) {
+                    skippedExamples.push(existing.name);
+                    map.set(key, g); // Replace with cheaper
+                } else {
+                    skippedExamples.push(g.name);
+                }
+                skippedCount++;
             }
         });
+        
+        if (skippedCount > 0) {
+            const ex = skippedExamples.slice(0, 3).join(", ");
+            debugLog(`[OPTIMIZATION] Skipped ${skippedCount} duplicate-spec GPUs to speed up scan. (e.g. ${ex}...)`);
+        }
         
         // Sort by Score Descending (Highest Performance First)
         return Array.from(map.values()).sort((a,b) => b.score - a.score);
@@ -2523,7 +2600,13 @@
     // =========================================================
 
     function generateBuilds() {
-        if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for CPU and GPU files to load from datas/ folder!");
+        debugClear();
+        debugLog("--- STARTING SCAN ---");
+
+        if (!Loaded.cpu || !Loaded.gpu) {
+            debugLog("CRITICAL ERROR: Data files not loaded yet.");
+            return alert("Wait for CPU and GPU files to load from datas/ folder!");
+        }
         
         // CLEAR SORT CACHE ON NEW GENERATION
         sortedCache = {};
@@ -2536,6 +2619,8 @@
         const maxPoolSize = parseIntVal('resLimit'); 
         const sort = document.getElementById('mainSort').value;
         
+        debugLog(`Constraints: Budget $${budget}, Target ${target}, Level ${lvl}, Pool Limit ${maxPoolSize}`);
+
         // Global State & Toggles
         const useOC = globalUseOC;
         const useXMP = globalUseXMP;
@@ -2601,6 +2686,8 @@
         if (usePsu && allPsu.length > 0) minAuxCost += allPsu[0].price;
         if (useCooler && allCoolers.length > 0) minAuxCost += allCoolers[0].price;
 
+        debugLog(`Minimum Auxiliary Cost (Case+PSU+Cooler+Storage): $${minAuxCost}`);
+
         // --- 4. PREPARE CORE COMPONENT LISTS ---
 
         // CPUs: Filtered & Sorted by Score
@@ -2617,9 +2704,14 @@
             return scoreB - scoreA;
         });
 
+        debugLog(`CPUs: Found ${validCpu.length} valid CPUs after filters.`);
+
         // Mobos & GPUs: Use Optimized Helper Functions
         const validMobos = getOptimizedMoboList(Array.from(DB.mobo.values()), lvl);
+        debugLog(`Motherboards: Testing ${validMobos.length} unique optimized boards.`);
+
         const validGpus = getOptimizedGpuList(Array.from(DB.gpu.values()), lvl);
+        debugLog(`GPUs: Testing ${validGpus.length} unique optimized GPUs.`);
 
         // GPU Counts
         let selectedGpuCounts = Array.from(selectedOptions.gpuCount);
@@ -2628,10 +2720,19 @@
 
         builds = [];
 
+        // Counters for "Why skipped"
+        let skips = {
+            budget: 0,
+            score: 0,
+            wattage: 0,
+            compatibility: 0,
+            poolLimit: false
+        };
+
         // --- 5. EXECUTE BUILD SCAN LOOP ---
         
         for (const cpu of validCpu) {
-            if (builds.length >= maxPoolSize) break;
+            if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
             // --- RAM PREPARATION ---
             let ramTiers = [];
@@ -2666,7 +2767,7 @@
             }
 
             for (const ram of ramTiers) {
-                if (builds.length >= maxPoolSize) break;
+                if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
                 // Handle Stick Counts
                 const reqSticks = parseInt(document.getElementById('ramSticks').value);
@@ -2692,7 +2793,7 @@
                     if (fittingMobos.length === 0) continue;
 
                     for (const mobo of fittingMobos) {
-                        if (builds.length >= maxPoolSize) break;
+                        if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
                         // Calculate CPU Score ONCE per Mobo/Ram combo
                         let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
@@ -2710,13 +2811,13 @@
 
                         // --- GPU LOOP ---
                         for (const gpuCnt of selectedGpuCounts) {
-                            if (builds.length >= maxPoolSize) break;
+                            if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
                             
                             // Check Motherboard Slots for Multi-GPU
                             if (mobo && gpuCnt > 1 && mobo.pciSlots < 5) continue;
 
                             for (const gpu of validGpus) {
-                                if (builds.length >= maxPoolSize) break;
+                                if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
                                 // --- 1. CHEAP CHECKS (Math Only) ---
 
@@ -2735,8 +2836,8 @@
 
                                 // Wattage Check
                                 const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
-                                if (limitTotalW && totalWatts > limitTotalW) continue;
-                                if (limitGpuW && (gpu.watts || 0) > limitGpuW) continue;
+                                if (limitTotalW && totalWatts > limitTotalW) { skips.wattage++; continue; }
+                                if (limitGpuW && (gpu.watts || 0) > limitGpuW) { skips.wattage++; continue; }
 
                                 // Score Check
                                 let gpuScore = gpuCnt === 1 ? gpu.score :
@@ -2745,12 +2846,12 @@
                                 if (!gpuScore) continue;
 
                                 const final3D = calculate3DMark(liveCpuScore, gpuScore);
-                                if (minScore > 0 && final3D < minScore) continue;
+                                if (minScore > 0 && final3D < minScore) { skips.score++; continue; }
 
                                 // Budget Prediction (Core Parts + Min Aux)
                                 // If this fails, no Case in the world will make it cheaper.
                                 let currentTotal = partialPrice + (gpu.price * gpuCnt) + minAuxCost;
-                                if (currentTotal > budget) continue;
+                                if (currentTotal > budget) { skips.budget++; continue; }
 
                                 // --- 2. EXPENSIVE CHECKS (Array Finding) ---
                                 // We only search for Cases/Coolers/PSUs if the build is mathematically valid
@@ -2766,7 +2867,7 @@
                                         if (requiredHDDSlots > c.hddSlots) return false;
                                         return true;
                                     });
-                                    if (!bCase) continue; // No fitting case found
+                                    if (!bCase) { skips.compatibility++; continue; } // No fitting case found
                                     casePrice = bCase.price;
                                 }
 
@@ -2786,7 +2887,7 @@
                                         if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
                                         return true;
                                     });
-                                    if (!psu) continue; // No fitting PSU found
+                                    if (!psu) { skips.compatibility++; continue; } // No fitting PSU found
                                     psuPrice = psu.price;
                                 }
 
@@ -2801,7 +2902,7 @@
                                 // Recalculate precise total (removing the minAuxCost estimate and adding real costs)
                                 let realTotal = partialPrice + (gpu.price * gpuCnt) + casePrice + coolerPrice + psuPrice + fanPrice + totalStorageCost;
 
-                                if (realTotal > budget) continue;
+                                if (realTotal > budget) { skips.budget++; continue; }
 
                                 // Success!
                                 builds.push({
@@ -2822,6 +2923,20 @@
                 } // End Sticks Loop
             } // End Ram Loop
         } // End CPU Loop
+
+        if (skips.poolLimit) {
+            debugLog("!!! MAX RESULTS POOL REACHED. Scanning stopped early.");
+            debugLog("TIP: Increase 'Max Results Pool' input or refine filters to see more combinations.");
+        } else {
+            debugLog("Scan completed (Processed all valid loops).");
+        }
+        
+        debugLog(`SKIPPED STATS (Reasons why parts didn't appear):`);
+        debugLog(`- Budget exceeded: ${skips.budget.toLocaleString()} times`);
+        debugLog(`- Score too low: ${skips.score.toLocaleString()} times`);
+        debugLog(`- Wattage exceeded: ${skips.wattage.toLocaleString()} times`);
+        debugLog(`- Physical Incompatibility (No case/psu fits): ${skips.compatibility.toLocaleString()} times`);
+        debugLog(`- Optimization: See above for skipped 'duplicate' parts.`);
 
         sortBuildsArray(builds, sort);
 
