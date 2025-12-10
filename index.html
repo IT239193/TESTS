@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Live Calculator (Turbo Scan + IndexedDB)</title>
+    <title>PCBS2 Ultimate Pro Builder - Live Calculator (SQL Turbo)</title>
+    <!-- SQLite WASM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.min.js"></script>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -590,17 +592,6 @@
             border-radius: 4px;
         }
 
-        /* Auto-Cache Toggle Container */
-        .auto-cache-container {
-            background: rgba(46, 204, 113, 0.15); /* Green tint */
-            border: 1px solid var(--success);
-            padding: 0 15px;
-            height: 60px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-        }
-
         .score-range-text {
             color: #95a5a6;
             font-weight: 500;
@@ -1174,7 +1165,7 @@
 <div class="container">
     <header>
         <h1>PCBS2 Ultimate Builder</h1>
-        <div class="header-subtitle">TURBO SCAN ENABLED</div>
+        <div class="header-subtitle">SQL TURBO MODE ENABLED</div>
         <button class="view-toggle-btn" onclick="toggleView()" id="mainViewToggle">
             <span style="font-size:1.4em; display:block; margin-bottom:5px;">Data Viewer</span>
             <span style="font-size:1.1em; font-weight:normal; color:#ccc;">click this box to swap to the data info page where u can know right OC values, more info about parts, and countless more stuff</span>
@@ -1182,7 +1173,7 @@
         <!-- Performance Tip -->
         <div id="perfWarning" class="hidden">
             <span>💡 PRO TIP:</span> 
-            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool could become massive, and that can slow the scans.
+            If you don't specify preferred RAM brand, size, frequency, or other component filters, the generated results pool could become massive.
             <div class="close-warning" onclick="dismissWarning()">&times;</div>
         </div>
     </header>
@@ -1222,7 +1213,7 @@
                     <input type="number" id="level" value="30" min="1" oninput="refreshDropdowns()">
                 </div>
                 <div class="input-group">
-                    <label>Max Results Output</label>
+                    <label>Max Results Limit (for Display)</label>
                     <input type="text" id="resLimit" value="2,000" title="The number of results to display (Scan is always 100%)">
                 </div>
                 <div class="input-group">
@@ -1562,14 +1553,6 @@
                     <label class="min-score-label">Min 3D Score (press enter):</label>
                     <input type="text" id="minScoreInput" placeholder="0" onchange="generateBuilds()">
                 </div>
-
-                <!-- New Auto-Pre Sort Toggle -->
-                <div class="auto-cache-container" title="Automatically sorts lists in background for instant switching (Responsiveness)">
-                    <div class="checkbox-container">
-                        <input type="checkbox" id="autoSortToggle" checked>
-                        <label for="autoSortToggle">Auto Pre-Sort</label>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -1610,115 +1593,10 @@
     };
     
     const Loaded = { cpu: false, gpu: false, ram: false, mobo: false, cases: false, psu: false, cooler: false, fan: false, storage: false };
-    
-    // IndexedDB Global Variables
-    let scanDB = null;
+
+    // SQLite Global
+    let sqlDB = null;
     let buildCount = 0;
-
-    async function initScanDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('PCBuilderScan', 1);
-            
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-                scanDB = request.result;
-                resolve();
-            };
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('builds')) {
-                    db.createObjectStore('builds', { autoIncrement: true });
-                }
-            };
-        });
-    }
-
-    async function clearScanDB() {
-        return new Promise((resolve) => {
-            const transaction = scanDB.transaction(['builds'], 'readwrite');
-            const store = transaction.objectStore('builds');
-            const request = store.clear();
-            request.onsuccess = () => resolve();
-        });
-    }
-
-    // Store ONLY the minimal data needed (indices/references)
-    async function writeBuildToDB(build) {
-        return new Promise((resolve) => {
-            // Store only names/indices, not full objects
-            const minimalBuild = {
-                score: build.score,
-                liveCpuScore: build.liveCpuScore,
-                gpuScore: build.gpuScore,
-                diff: build.diff,
-                price: build.price,
-                watts: build.watts,
-                
-                // Store only names, we'll reconstruct from DB later
-                cpuName: build.cpu.name,
-                gpuName: build.gpu.name,
-                gpuCnt: build.gpuCnt,
-                ramName: build.ram?.name || null,
-                ramSticks: build.ramSticks,
-                moboName: build.mobo?.name || null,
-                caseName: build.case?.name || null,
-                coolerName: build.cooler?.name || null,
-                psuName: build.psu?.name || null,
-                fanName: build.fan?.name || null,
-                storageNames: build.storages ? build.storages.map(s => s.name) : []
-            };
-            
-            const transaction = scanDB.transaction(['builds'], 'readwrite');
-            const store = transaction.objectStore('builds');
-            const request = store.add(minimalBuild);
-            
-            request.onsuccess = () => {
-                buildCount++;
-                resolve();
-            };
-        });
-    }
-
-    async function getAllBuildsFromDB(sortKey, limit) {
-        return new Promise((resolve) => {
-            const transaction = scanDB.transaction(['builds'], 'readonly');
-            const store = transaction.objectStore('builds');
-            const request = store.getAll();
-            
-            request.onsuccess = () => {
-                const minimalBuilds = request.result;
-                
-                // Reconstruct full objects from DB references
-                const fullBuilds = minimalBuilds.map(mb => ({
-                    score: mb.score,
-                    liveCpuScore: mb.liveCpuScore,
-                    gpuScore: mb.gpuScore,
-                    diff: mb.diff,
-                    price: mb.price,
-                    watts: mb.watts,
-                    
-                    cpu: DB.cpu.get(mb.cpuName),
-                    gpu: DB.gpu.get(mb.gpuName),
-                    gpuCnt: mb.gpuCnt,
-                    ram: mb.ramName ? DB.ram.get(mb.ramName) : null,
-                    ramSticks: mb.ramSticks,
-                    mobo: mb.moboName ? DB.mobo.get(mb.moboName) : null,
-                    case: mb.caseName ? DB.cases.get(mb.caseName) : null,
-                    cooler: mb.coolerName ? DB.cooler.get(mb.coolerName) : null,
-                    psu: mb.psuName ? DB.psu.get(mb.psuName) : null,
-                    fan: mb.fanName ? DB.fan.get(mb.fanName) : null,
-                    storages: mb.storageNames.map(n => DB.storage.get(n)).filter(Boolean)
-                }));
-                
-                // Sort
-                sortBuildsArray(fullBuilds, sortKey);
-                
-                // Limit
-                resolve(limit ? fullBuilds.slice(0, limit) : fullBuilds);
-            };
-        });
-    }
 
     const selectedOptions = {
         vram: new Set(),
@@ -1744,8 +1622,7 @@
     let globalUseOC = false;
     let globalUseXMP = false;
 
-    // Caching for Sorting
-    let sortedCache = {};
+    // Caching for Sorting (Still used by SQL query builder indirectly)
     const PRECALC_GPU_SORT = false; 
     const PRECALC_CPU_SORT = false;
 
@@ -1790,7 +1667,7 @@
         }
     };
 
-    let builds = [];
+    let builds = []; // Only holds CURRENT PAGE now
     let currentMode = 'TS';
     let currentPage = 1;
     let itemsPerPage = 100;
@@ -1838,11 +1715,141 @@
         warningDismissed = true;
     }
 
+    // ==========================================
+    // SQLITE INITIALIZATION
+    // ==========================================
+
+    async function initSQLite() {
+        if (sqlDB) return;
+        try {
+            const SQL = await initSqlJs({
+                locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+            });
+            sqlDB = new SQL.Database();
+            
+            // Create Schema with Indices for TURBO speed
+            sqlDB.run(`
+                CREATE TABLE builds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    score INTEGER,
+                    liveCpuScore INTEGER,
+                    gpuScore INTEGER,
+                    diff INTEGER,
+                    price REAL,
+                    watts INTEGER,
+                    cpuName TEXT,
+                    gpuName TEXT,
+                    gpuCnt INTEGER,
+                    ramName TEXT,
+                    ramSticks INTEGER,
+                    moboName TEXT,
+                    caseName TEXT,
+                    coolerName TEXT,
+                    psuName TEXT,
+                    fanName TEXT,
+                    storageNames TEXT
+                );
+                
+                CREATE INDEX idx_score ON builds(score);
+                CREATE INDEX idx_price ON builds(price);
+                CREATE INDEX idx_diff ON builds(ABS(diff));
+                CREATE INDEX idx_gpu_score ON builds(gpuScore);
+                CREATE INDEX idx_cpu_score ON builds(liveCpuScore);
+            `);
+            console.log("SQLite Database Initialized");
+        } catch (e) {
+            console.error("Failed to init SQLite", e);
+            alert("Failed to load SQL engine. Browser may not support WASM.");
+        }
+    }
+
+    function clearSQLite() {
+        if(sqlDB) {
+            sqlDB.run('DELETE FROM builds'); // Faster than Drop/Create
+            // Reset auto increment
+            sqlDB.run('DELETE FROM sqlite_sequence WHERE name="builds"');
+        }
+        buildCount = 0;
+    }
+
+    function getTotalBuilds() {
+        if(!sqlDB) return 0;
+        const result = sqlDB.exec('SELECT COUNT(*) FROM builds');
+        if(!result.length) return 0;
+        return result[0].values[0][0];
+    }
+
+    function getScoreRange() {
+        if(!sqlDB) return { min: 0, max: 0 };
+        const result = sqlDB.exec('SELECT MIN(score), MAX(score) FROM builds');
+        if (!result.length || !result[0].values[0][0]) return { min: 0, max: 0 };
+        return { min: result[0].values[0][0], max: result[0].values[0][1] };
+    }
+
+    function getBuildsFromSQL(sortKey, limit, offset = 0) {
+        if(!sqlDB) return [];
+        
+        let orderBy = 'ABS(diff) ASC'; 
+        
+        if (sortKey === 'score_desc') orderBy = 'score DESC';
+        else if (sortKey === 'score_asc') orderBy = 'score ASC';
+        else if (sortKey === 'price_asc') orderBy = 'price ASC';
+        else if (sortKey === 'price_desc') orderBy = 'price DESC';
+        else if (sortKey === 'gpu_score') orderBy = 'gpuScore DESC';
+        else if (sortKey === 'cpu_score') orderBy = 'liveCpuScore DESC';
+        else if (sortKey === 'value_desc') orderBy = '(score * 1.0 / price) DESC';
+        else if (sortKey === 'value_asc') orderBy = '(score * 1.0 / price) ASC';
+        
+        const stmt = sqlDB.prepare(`
+            SELECT * FROM builds 
+            ORDER BY ${orderBy}
+            LIMIT $limit OFFSET $offset
+        `);
+        
+        stmt.bind({$limit: limit, $offset: offset});
+        
+        const output = [];
+        while(stmt.step()) {
+            const row = stmt.getAsObject();
+            
+            // Reconstruct Object
+            const storageNames = JSON.parse(row.storageNames || '[]');
+            
+            output.push({
+                score: row.score,
+                liveCpuScore: row.liveCpuScore,
+                gpuScore: row.gpuScore,
+                diff: row.diff,
+                price: row.price,
+                watts: row.watts,
+                cpu: DB.cpu.get(row.cpuName),
+                gpu: DB.gpu.get(row.gpuName),
+                gpuCnt: row.gpuCnt,
+                ram: row.ramName ? DB.ram.get(row.ramName) : null,
+                ramSticks: row.ramSticks,
+                mobo: row.moboName ? DB.mobo.get(row.moboName) : null,
+                case: row.caseName ? DB.cases.get(row.caseName) : null,
+                cooler: row.coolerName ? DB.cooler.get(row.coolerName) : null,
+                psu: row.psuName ? DB.psu.get(row.psuName) : null,
+                fan: row.fanName ? DB.fan.get(row.fanName) : null,
+                storages: storageNames.map(n => DB.storage.get(n)).filter(Boolean)
+            });
+        }
+        stmt.free();
+        return output;
+    }
+
+    // ==========================================
+    // DATA FETCHING
+    // ==========================================
+
     window.addEventListener('DOMContentLoaded', initAutoFetcher);
 
     async function initAutoFetcher() {
         Object.keys(DB).forEach(k => DB[k].clear());
         Object.keys(Loaded).forEach(k => Loaded[k] = false);
+
+        await initSQLite(); // Init DB on load
 
         const targets = [
             { id: 'cpu',       file: 'CPU.txt',              label: 'CPU' },
@@ -2631,26 +2638,29 @@
     }
 
     // =========================================================
-    // MAIN GENERATOR FUNCTION (FAST FLATTENED LOGIC + INDEXEDDB)
+    // MAIN GENERATOR FUNCTION (SQLITE POWERED)
     // =========================================================
     
     let precalcGpuConfigs = []; // Stores flattened valid GPU configs
 
     async function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
-
-        // Init IndexedDB
-        if (!scanDB) await initScanDB();
-        await clearScanDB();
+        
+        // Ensure SQL is ready
+        if (!sqlDB) {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('loadingOverlay').style.opacity = '1';
+            await initSQLite();
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
 
         // Reset state
         builds = [];
-        sortedCache = {};
         precalcGpuConfigs = [];
-        buildCount = 0;
-
+        clearSQLite();
+        
         document.getElementById('resCount').innerText = "0% Scanned...";
-        document.getElementById('scanStatus').innerText = "Streaming to DB 💾";
+        document.getElementById('scanStatus').innerText = "Running SQL Turbo Scan...";
         
         const btn = document.getElementById('generateBtn');
         btn.disabled = true;
@@ -2787,7 +2797,7 @@
         runScanChunk(0, config, lists);
     }
 
-    async function runScanChunk(cpuIndex, config, lists) {
+    function runScanChunk(cpuIndex, config, lists) {
         if (cpuIndex >= lists.validCpu.length) {
             finishScan(config);
             return;
@@ -2796,9 +2806,6 @@
         const cpu = lists.validCpu[cpuIndex];
         
         // --- A. Generate Valid Platforms for this CPU ---
-        // A Platform = CPU + Compatible Motherboard + Compatible RAM configuration
-        // We do this first, so we only iterate Valid platforms against the pre-calculated GPU list.
-        
         let validPlatforms = [];
         
         let ramTiers = [];
@@ -2832,18 +2839,13 @@
         }
 
         const stickCounts = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
-
-        // Find compatible mobos for this CPU
         const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
 
         for (const ram of ramTiers) {
             for (const sticks of stickCounts) {
                 if (config.targetRamVal > 0 && ram && (ram.size * sticks) !== config.targetRamVal) continue;
-                
-                // Determine memory type required
                 const memType = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
                 
-                // Filter Mobos for this RAM setup
                 const fitMobos = cpuMobos.filter(m => {
                    if (!m) return true;
                    if (m.ramType !== memType) return false;
@@ -2854,7 +2856,6 @@
                 if (fitMobos.length === 0) continue;
 
                 for (const mobo of fitMobos) {
-                    // Calc CPU Score once per platform
                     let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
                     let liveCpuScore;
                     
@@ -2879,19 +2880,26 @@
             }
         }
 
-        // --- B. JOIN: Platform + Pre-calc GPUs ---
-        // This is the flattened loop logic. We iterate platforms against the global GPU list.
+        // --- B. SQL TRANSACTION: Platform + Pre-calc GPUs ---
+        // We write to DB immediately inside a transaction
         
+        sqlDB.run("BEGIN TRANSACTION");
+        
+        const stmt = sqlDB.prepare(`
+            INSERT INTO builds (
+                score, liveCpuScore, gpuScore, diff, price, watts,
+                cpuName, gpuName, gpuCnt, ramName, ramSticks,
+                moboName, caseName, coolerName, psuName, fanName, storageNames
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
         for (const plat of validPlatforms) {
-            
-            // Check budget headroom
             if (plat.price + lists.minAuxCost > config.budget) continue;
 
             for (const gpuConf of precalcGpuConfigs) {
                 
-                // Check Compatibility: Motherboard PCI Slots & SLI
                 if (plat.mobo && gpuConf.count > 1) {
-                    if (plat.mobo.pciSlots < 5) continue; // Basic heuristic
+                    if (plat.mobo.pciSlots < 5) continue;
                     if (gpuConf.sliType === 'SLI' && !plat.mobo.supportSLI) continue;
                     if (gpuConf.sliType === 'Crossfire' && !plat.mobo.supportCF) continue;
                 }
@@ -2899,17 +2907,13 @@
                 const totalWatts = plat.watts + gpuConf.watts + config.extraW;
                 if (config.limitTotalW && totalWatts > config.limitTotalW) continue;
 
-                // Calculate 3D Score
                 const final3D = calculate3DMark(plat.score, gpuConf.score);
                 if (config.minScore > 0 && final3D < config.minScore) continue;
 
-                // Budget Check (Cheap)
                 let currentTotal = plat.price + gpuConf.price + lists.minAuxCost;
                 if (currentTotal > config.budget) continue;
 
                 // --- EXPENSIVE CHECKS (Case, PSU, Cooler) ---
-                // We only do this if everything else passes
-                
                 let bCase = null;
                 let casePrice = 0;
                 if (config.useCase) {
@@ -2953,132 +2957,92 @@
                 }
 
                 let realTotal = plat.price + gpuConf.price + casePrice + coolerPrice + psuPrice + fanPrice + lists.totalStorageCost;
-
                 if (realTotal > config.budget) continue;
 
-                // WRITE TO DB INSTEAD OF ARRAY
-                await writeBuildToDB({
-                    score: final3D,
-                    liveCpuScore: plat.score, 
-                    gpuScore: gpuConf.score, 
-                    diff: final3D - config.target,
-                    price: realTotal,
-                    watts: totalWatts,
-                    cpu: plat.cpu, 
-                    gpu: gpuConf.gpu, 
-                    gpuCnt: gpuConf.count, 
-                    ram: plat.ram, 
-                    ramSticks: plat.sticks, 
-                    mobo: plat.mobo,
-                    case: bCase, cooler, psu, fan, 
-                    storages: [...lists.finalStorageList] 
-                });
+                // NO BUFFERING. WRITE TO DB.
+                const storageNameList = JSON.stringify(lists.finalStorageList.map(s => s.name));
+                
+                stmt.run([
+                    final3D,
+                    plat.score,
+                    gpuConf.score,
+                    final3D - config.target,
+                    realTotal,
+                    totalWatts,
+                    plat.cpu.name,
+                    gpuConf.gpu.name,
+                    gpuConf.count,
+                    plat.ram?.name || null,
+                    plat.sticks,
+                    plat.mobo?.name || null,
+                    bCase?.name || null,
+                    cooler?.name || null,
+                    psu?.name || null,
+                    fan?.name || null,
+                    storageNameList
+                ]);
+                
+                buildCount++;
             }
         }
+        
+        stmt.free();
+        sqlDB.run("COMMIT");
 
         // Update Progress
         const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
-        document.getElementById('resCount').innerText = `${percent}% Scanned... (${buildCount} builds)`;
+        document.getElementById('resCount').innerText = `${percent}% Scanned... (${formatNumber(buildCount)} found)`;
 
         // Next chunk
         setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
     }
 
-    async function finishScan(config) {
+    function finishScan(config) {
         const btn = document.getElementById('generateBtn');
         btn.disabled = false;
         btn.innerText = "GENERATE BUILDS";
 
-        document.getElementById('resCount').innerText = `Loading & sorting ${buildCount} builds...`;
-
-        // Load, reconstruct, sort, and limit from DB
-        builds = await getAllBuildsFromDB(config.sort, config.maxPoolSize);
-
-        const scoreRangeDisplay = document.getElementById('scoreRangeDisplay');
-        if (builds.length > 0) {
-            let minS = builds[0].score;
-            let maxS = builds[0].score;
-            // Since getAllBuildsFromDB sorts the list, if sorting by score, 
-            // the min/max are just the ends. But sorting could be price.
-            // We iterate quickly to find range for display purposes
-            for(let i=0; i<builds.length; i++){
-                if(builds[i].score < minS) minS = builds[i].score;
-                if(builds[i].score > maxS) maxS = builds[i].score;
-            }
-            scoreRangeDisplay.innerText = `Lowest: ${formatNumber(minS)} | Highest: ${formatNumber(maxS)}`;
-        } else {
-            scoreRangeDisplay.innerText = "";
-        }
-
-        document.getElementById('resCount').innerText = `${formatNumber(builds.length)} Builds Found`;
-        document.getElementById('pagination').style.display = builds.length > 0 ? 'flex' : 'none';
+        const total = getTotalBuilds();
+        const { min, max } = getScoreRange();
+        
+        document.getElementById('resCount').innerText = `${formatNumber(total)} Builds Found`;
         document.getElementById('scanStatus').innerText = "Scan Complete.";
-
+        
+        const scoreRangeDisplay = document.getElementById('scoreRangeDisplay');
+        scoreRangeDisplay.innerText = `Lowest: ${formatNumber(min)} | Highest: ${formatNumber(max)}`;
+        
+        document.getElementById('pagination').style.display = total > 0 ? 'flex' : 'none';
+        
         renderPage(1);
-
-        if (document.getElementById('autoSortToggle').checked) {
-            triggerBackgroundPreSort();
-        }
-    }
-
-    function triggerBackgroundPreSort() {
-        setTimeout(() => {
-            const sortKeys = ['diff', 'score_desc', 'score_asc', 'price_asc', 'price_desc', 'value_desc', 'value_asc'];
-            if (PRECALC_GPU_SORT) sortKeys.push('gpu_score');
-            if (PRECALC_CPU_SORT) sortKeys.push('cpu_score');
-
-            sortKeys.forEach(key => {
-                const copy = [...builds];
-                sortBuildsArray(copy, key);
-                sortedCache[key] = copy;
-            });
-        }, 100);
-    }
-    
-    function sortBuildsArray(array, sortType) {
-        array.sort((a,b) => {
-            if (sortType === 'score_desc') return b.score - a.score;
-            if (sortType === 'score_asc') return a.score - b.score;
-            if (sortType === 'price_asc') return a.price - b.price;
-            if (sortType === 'price_desc') return b.price - a.price;
-            if (sortType === 'gpu_score') return b.gpuScore - a.gpuScore;
-            if (sortType === 'cpu_score') return b.liveCpuScore - a.liveCpuScore;
-            if (sortType === 'value_desc') return (b.score / b.price) - (a.score / a.price);
-            if (sortType === 'value_asc') return (a.score / a.price) - (b.score / b.price);
-            return Math.abs(a.diff) - Math.abs(b.diff); 
-        });
     }
 
     function renderPage(page) {
-        if (!builds.length) {
+        currentPage = page;
+        const sort = document.getElementById('mainSort').value;
+        const total = getTotalBuilds();
+
+        if (total === 0) {
             document.getElementById('resultsList').innerHTML = '<div style="text-align:center;padding:40px;color:#e74c3c;font-size:1.4em;">No Builds Found</div>';
             return;
         }
 
-        const sort = document.getElementById('mainSort').value;
-        if (sortedCache[sort]) {
-            builds = sortedCache[sort]; 
-        } else {
-            sortBuildsArray(builds, sort);
-        }
-
-        const useOC = globalUseOC;
-        
-        currentPage = page;
         const start = (page - 1) * itemsPerPage;
-        const end = start + itemsPerPage;
-        const slice = builds.slice(start, end);
-        const total = Math.ceil(builds.length / itemsPerPage);
+        
+        // PULL PAGE FROM SQL
+        builds = getBuildsFromSQL(sort, itemsPerPage, start);
+        
+        const totalPages = Math.ceil(total / itemsPerPage);
+        const useOC = globalUseOC;
 
         const list = document.getElementById('resultsList');
         list.innerHTML = '';
 
-        slice.forEach((b, i) => {
+        builds.forEach((b, i) => {
             const diffClass = b.diff > 0 ? 'diff-pos' : 'diff-neg';
             const sign = b.diff > 0 ? '+' : '';
             const gpuClass = getBrandClass(b.gpu);
             const cpuClass = getBrandClass(b.cpu);
-            const buildIdx = start + i;
+            const buildIdx = i; // Index relative to current page for popup
 
             const gpuCountStr = b.gpuCnt > 1 ? `${b.gpuCnt}x ` : '';
             const gpuEmoji = b.gpu.isWater ? '💧' : '💨';
@@ -3221,10 +3185,10 @@
 
         const pageInfo = document.getElementById('pageInfo');
         if (!pageInfo.querySelector('input')) {
-            pageInfo.innerText = `Page ${page} of ${total}`;
+            pageInfo.innerText = `Page ${page} of ${totalPages}`;
         }
         document.getElementById('btnPrev').disabled = (page === 1);
-        document.getElementById('btnNext').disabled = (page === total || total === 0);
+        document.getElementById('btnNext').disabled = (page === totalPages || totalPages === 0);
     }
 
     function renderInteractive(label, part, bIdx, type, specs) {
@@ -3242,15 +3206,17 @@
     }
 
     function changePage(d) {
-        const total = Math.ceil(builds.length / itemsPerPage);
+        const total = getTotalBuilds();
+        const totalPages = Math.ceil(total / itemsPerPage);
         const n = currentPage + d;
-        if (n > 0 && n <= total) renderPage(n);
+        if (n > 0 && n <= totalPages) renderPage(n);
     }
 
     function makePageEditable() {
         const pageInfo = document.getElementById('pageInfo');
         if (pageInfo.querySelector('input')) return;
-        const totalPages = Math.ceil(builds.length / itemsPerPage);
+        const total = getTotalBuilds();
+        const totalPages = Math.ceil(total / itemsPerPage);
         const input = document.createElement('input');
         input.type = 'number';
         input.value = currentPage;
