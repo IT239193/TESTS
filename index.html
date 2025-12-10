@@ -2599,6 +2599,10 @@
     // MAIN GENERATOR FUNCTION
     // =========================================================
 
+  // =========================================================
+    // UPDATED GENERATOR FUNCTION (With Cut-off Tracking)
+    // =========================================================
+
     function generateBuilds() {
         debugClear();
         debugLog("--- STARTING SCAN ---");
@@ -2608,7 +2612,7 @@
             return alert("Wait for CPU and GPU files to load from datas/ folder!");
         }
         
-        // CLEAR SORT CACHE ON NEW GENERATION
+        // CLEAR SORT CACHE
         sortedCache = {};
 
         // --- 1. GATHER INPUTS ---
@@ -2641,17 +2645,14 @@
         const useFan = document.getElementById('incFans').checked && Loaded.fan;
         const useStorage = document.getElementById('incStorage').checked && Loaded.storage;
 
-        // --- 2. PREPARE AUXILIARY LISTS (Sorted Cheapest First) ---
+        // --- 2. PREPARE AUX LISTS ---
         const allCases = useCase ? Array.from(DB.cases.values()).filter(c=>c.level<=lvl).sort((a,b)=>a.price-b.price) : [];
         const allCoolers = useCooler ? Array.from(DB.cooler.values()).filter(c=>c.level<=lvl).sort((a,b)=>a.price-b.price) : [];
         const allPsu = usePsu ? Array.from(DB.psu.values()).filter(p=>p.level<=lvl).sort((a,b)=>a.price-b.price) : [];
         const allFans = useFan ? Array.from(DB.fan.values()).filter(f=>f.level<=lvl).sort((a,b)=>a.price-b.price) : [];
 
-        // --- 3. CALCULATE MINIMUM BASELINE COSTS ---
-        // This allows us to "fail fast" if the budget is exceeded before doing complex checks
+        // --- 3. MINIMUM COSTS ---
         let minAuxCost = 0;
-        
-        // Calculate Storage Cost
         let totalStorageCost = 0;
         let finalStorageList = [];
         let requiredSSDSlots = 0;
@@ -2670,7 +2671,6 @@
             }
         });
 
-        // Add dummy storage cost if requested but none selected
         if (useStorage && finalStorageList.length === 0) {
             const fallback = Array.from(DB.storage.values()).filter(s => s.type !== 'HDD' && s.level <= lvl).sort((a,b) => a.price - b.price)[0];
             if (fallback) {
@@ -2681,16 +2681,11 @@
         }
         minAuxCost += totalStorageCost;
 
-        // Add minimum cost of Case, PSU, Cooler
         if (useCase && allCases.length > 0) minAuxCost += allCases[0].price;
         if (usePsu && allPsu.length > 0) minAuxCost += allPsu[0].price;
         if (useCooler && allCoolers.length > 0) minAuxCost += allCoolers[0].price;
 
-        debugLog(`Minimum Auxiliary Cost (Case+PSU+Cooler+Storage): $${minAuxCost}`);
-
-        // --- 4. PREPARE CORE COMPONENT LISTS ---
-
-        // CPUs: Filtered & Sorted by Score
+        // --- 4. PREPARE CORE LISTS ---
         const allCpus = Array.from(DB.cpu.values());
         const validCpu = allCpus.filter(c => {
             if (c.level > lvl) return false;
@@ -2704,23 +2699,15 @@
             return scoreB - scoreA;
         });
 
-        debugLog(`CPUs: Found ${validCpu.length} valid CPUs after filters.`);
-
-        // Mobos & GPUs: Use Optimized Helper Functions
         const validMobos = getOptimizedMoboList(Array.from(DB.mobo.values()), lvl);
-        debugLog(`Motherboards: Testing ${validMobos.length} unique optimized boards.`);
-
         const validGpus = getOptimizedGpuList(Array.from(DB.gpu.values()), lvl);
-        debugLog(`GPUs: Testing ${validGpus.length} unique optimized GPUs.`);
 
-        // GPU Counts
         let selectedGpuCounts = Array.from(selectedOptions.gpuCount);
         if (selectedGpuCounts.length === 0) selectedGpuCounts = [1, 2, 3, 4];
         selectedGpuCounts.sort((a,b)=>a-b);
 
         builds = [];
 
-        // Counters for "Why skipped"
         let skips = {
             budget: 0,
             score: 0,
@@ -2729,10 +2716,25 @@
             poolLimit: false
         };
 
+        // --- TRACKING VARS FOR CUT-OFF ---
+        let processedCpuCount = 0;
+        let lastCpuName = "";
+
         // --- 5. EXECUTE BUILD SCAN LOOP ---
         
-        for (const cpu of validCpu) {
-            if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
+        // Changed to normal for loop to track index
+        for (let i = 0; i < validCpu.length; i++) {
+            
+            // CHECK POOL LIMIT AT START OF CPU LOOP
+            if (builds.length >= maxPoolSize) { 
+                skips.poolLimit = true; 
+                // We stop here. All CPUs from index 'i' to end are skipped.
+                break; 
+            }
+
+            const cpu = validCpu[i];
+            processedCpuCount++;
+            lastCpuName = cpu.name;
 
             // --- RAM PREPARATION ---
             let ramTiers = [];
@@ -2747,7 +2749,6 @@
                 );
                 
                 if (useRamPerfMode && selectedOptions.ramNames.size === 0) {
-                    // Optimization: Deduplicate RAM by Type/Freq/Size to avoid redundant scans
                     const bestValueBySpec = new Map();
                     for (const r of compatibleRam) {
                         const mfgr = r.mfgr || "Generic";
@@ -2769,7 +2770,6 @@
             for (const ram of ramTiers) {
                 if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
-                // Handle Stick Counts
                 const reqSticks = parseInt(document.getElementById('ramSticks').value);
                 const stickCounts = reqSticks === 0 ? [1, 2, 4] : [reqSticks];
                 const targetRamVal = parseIntVal('targetTotalRam');
@@ -2777,16 +2777,13 @@
                 for(const sticks of stickCounts) {
                     if (targetRamVal > 0 && ram && (ram.size * sticks) !== targetRamVal) continue;
                     
-                    // --- MOTHERBOARD SELECTION ---
                     let fittingMobos = [null];
                     if (useMobo) {
                         const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
-                        
-                        // Strict Fit Filter: Socket, RamType, and Physical Space (ATX/EATX check handled by case later)
                         fittingMobos = validMobos.filter(m => 
                             m.socket === cpu.socket && 
                             m.ramType === type &&
-                            (sticks !== 4 || m.size !== 'Mini-ITX') // Mini-ITX usually only has 2 slots
+                            (sticks !== 4 || m.size !== 'Mini-ITX')
                         );
                     }
 
@@ -2795,7 +2792,6 @@
                     for (const mobo of fittingMobos) {
                         if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
-                        // Calculate CPU Score ONCE per Mobo/Ram combo
                         let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
                         let liveCpuScore;
                         
@@ -2809,19 +2805,14 @@
 
                         const partialPrice = cpu.price + (ram ? (ram.price * sticks) : 0) + (mobo ? mobo.price : 0);
 
-                        // --- GPU LOOP ---
                         for (const gpuCnt of selectedGpuCounts) {
                             if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
-                            
-                            // Check Motherboard Slots for Multi-GPU
                             if (mobo && gpuCnt > 1 && mobo.pciSlots < 5) continue;
 
                             for (const gpu of validGpus) {
                                 if (builds.length >= maxPoolSize) { skips.poolLimit = true; break; }
 
-                                // --- 1. CHEAP CHECKS (Math Only) ---
-
-                                // Multi-GPU Logic
+                                // CHEAP CHECKS
                                 if (gpuCnt === 2 && !gpu.score2) continue;
                                 if (gpuCnt === 3 && !gpu.score3) continue;
                                 if (gpuCnt === 4 && !gpu.score4) continue;
@@ -2834,12 +2825,10 @@
                                     }
                                 }
 
-                                // Wattage Check
                                 const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
                                 if (limitTotalW && totalWatts > limitTotalW) { skips.wattage++; continue; }
                                 if (limitGpuW && (gpu.watts || 0) > limitGpuW) { skips.wattage++; continue; }
 
-                                // Score Check
                                 let gpuScore = gpuCnt === 1 ? gpu.score :
                                               gpuCnt === 2 ? gpu.score2 :
                                               gpuCnt === 3 ? gpu.score3 : gpu.score4;
@@ -2848,14 +2837,10 @@
                                 const final3D = calculate3DMark(liveCpuScore, gpuScore);
                                 if (minScore > 0 && final3D < minScore) { skips.score++; continue; }
 
-                                // Budget Prediction (Core Parts + Min Aux)
-                                // If this fails, no Case in the world will make it cheaper.
                                 let currentTotal = partialPrice + (gpu.price * gpuCnt) + minAuxCost;
                                 if (currentTotal > budget) { skips.budget++; continue; }
 
-                                // --- 2. EXPENSIVE CHECKS (Array Finding) ---
-                                // We only search for Cases/Coolers/PSUs if the build is mathematically valid
-
+                                // EXPENSIVE CHECKS
                                 let bCase = null;
                                 let casePrice = 0;
                                 if (useCase) {
@@ -2867,7 +2852,7 @@
                                         if (requiredHDDSlots > c.hddSlots) return false;
                                         return true;
                                     });
-                                    if (!bCase) { skips.compatibility++; continue; } // No fitting case found
+                                    if (!bCase) { skips.compatibility++; continue; } 
                                     casePrice = bCase.price;
                                 }
 
@@ -2887,7 +2872,7 @@
                                         if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
                                         return true;
                                     });
-                                    if (!psu) { skips.compatibility++; continue; } // No fitting PSU found
+                                    if (!psu) { skips.compatibility++; continue; }
                                     psuPrice = psu.price;
                                 }
 
@@ -2898,13 +2883,10 @@
                                     if(fan) fanPrice = fan.price;
                                 }
 
-                                // --- 3. FINAL VALIDATION ---
-                                // Recalculate precise total (removing the minAuxCost estimate and adding real costs)
                                 let realTotal = partialPrice + (gpu.price * gpuCnt) + casePrice + coolerPrice + psuPrice + fanPrice + totalStorageCost;
 
                                 if (realTotal > budget) { skips.budget++; continue; }
 
-                                // Success!
                                 builds.push({
                                     score: final3D,
                                     liveCpuScore: liveCpuScore, 
@@ -2916,27 +2898,42 @@
                                     case: bCase, cooler, psu, fan, 
                                     storages: [...finalStorageList] 
                                 });
+                            } 
+                        } 
+                    } 
+                } 
+            } 
+        } 
 
-                            } // End GPU Loop
-                        } // End GPU Count Loop
-                    } // End Mobo Loop
-                } // End Sticks Loop
-            } // End Ram Loop
-        } // End CPU Loop
-
+        // ==========================================
+        //  REPORTING "SKIPPED DUE TO POOL LIMIT"
+        // ==========================================
         if (skips.poolLimit) {
-            debugLog("!!! MAX RESULTS POOL REACHED. Scanning stopped early.");
-            debugLog("TIP: Increase 'Max Results Pool' input or refine filters to see more combinations.");
+            debugLog("⚠️ MAX RESULTS POOL REACHED (" + maxPoolSize.toLocaleString() + ")");
+            debugLog(`Scanner stopped while processing CPU #${processedCpuCount}: ${lastCpuName}`);
+            
+            // Calculate missed CPUs
+            const remainingCpus = validCpu.slice(processedCpuCount);
+            const missedCount = remainingCpus.length;
+            
+            if (missedCount > 0) {
+                debugLog(`❌ SKIPPED ${missedCount} ENTIRE CPU FAMILIES due to pool limit:`);
+                // List the first 10 skipped as examples
+                const examples = remainingCpus.slice(0, 10).map(c => c.name).join("\n - ");
+                debugLog(` - ${examples}`);
+                if (missedCount > 10) debugLog(`...and ${missedCount - 10} more.`);
+            } else {
+                debugLog("❌ Stopped mid-way through the current CPU's variations (RAM/Mobo/GPU combinations skipped for " + lastCpuName + ")");
+            }
         } else {
-            debugLog("Scan completed (Processed all valid loops).");
+            debugLog("✅ Scan completed successfully. All components processed.");
         }
         
-        debugLog(`SKIPPED STATS (Reasons why parts didn't appear):`);
-        debugLog(`- Budget exceeded: ${skips.budget.toLocaleString()} times`);
-        debugLog(`- Score too low: ${skips.score.toLocaleString()} times`);
-        debugLog(`- Wattage exceeded: ${skips.wattage.toLocaleString()} times`);
-        debugLog(`- Physical Incompatibility (No case/psu fits): ${skips.compatibility.toLocaleString()} times`);
-        debugLog(`- Optimization: See above for skipped 'duplicate' parts.`);
+        debugLog(`\nSTATS (Filtered Out):`);
+        debugLog(`- Budget: ${skips.budget.toLocaleString()}`);
+        debugLog(`- Score: ${skips.score.toLocaleString()}`);
+        debugLog(`- Wattage: ${skips.wattage.toLocaleString()}`);
+        debugLog(`- No physical fit: ${skips.compatibility.toLocaleString()}`);
 
         sortBuildsArray(builds, sort);
 
@@ -2962,7 +2959,6 @@
         
         renderPage(1);
 
-        // TRIGGER BACKGROUND SORTING
         if (document.getElementById('autoSortToggle').checked) {
             triggerBackgroundPreSort();
         }
