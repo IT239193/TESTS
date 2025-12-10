@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Live Calculator (Turbo Scan)</title>
+    <title>PCBS2 Ultimate Pro Builder - Turbo Scan (Disk Mode)</title>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -1609,6 +1609,11 @@
         storage: new Map()
     };
     
+    // OPFS File Handling Variables
+    let fileHandle = null;
+    let writableStream = null;
+    let buildCount = 0;
+
     const Loaded = { cpu: false, gpu: false, ram: false, mobo: false, cases: false, psu: false, cooler: false, fan: false, storage: false };
 
     const selectedOptions = {
@@ -1639,6 +1644,54 @@
     let sortedCache = {};
     const PRECALC_GPU_SORT = false; 
     const PRECALC_CPU_SORT = false;
+
+    // --- OPFS File System Handlers (Client-Side Storage) ---
+    async function initScanFile() {
+        try {
+            // Access Origin Private File System
+            const opfsRoot = await navigator.storage.getDirectory();
+            fileHandle = await opfsRoot.getFileHandle('scan_results.json', { create: true });
+            writableStream = await fileHandle.createWritable();
+            buildCount = 0;
+            // Start JSON array
+            await writableStream.write('[');
+            return true; // Success
+        } catch (err) {
+            console.warn('OPFS not supported or blocked:', err);
+            // Fallback: use memory (old way) if this fails
+            return false;
+        }
+    }
+
+    async function writeBuildToFile(build) {
+        if (!writableStream) {
+            // Fallback to memory array
+            builds.push(build);
+            return;
+        }
+        
+        // Add comma if not the first item
+        const prefix = buildCount > 0 ? ',' : '';
+        await writableStream.write(prefix + JSON.stringify(build));
+        buildCount++;
+    }
+
+    async function closeScanFile() {
+        if (!writableStream) return;
+        // Close JSON array
+        await writableStream.write(']');
+        await writableStream.close();
+        writableStream = null; // Reset
+    }
+
+    async function getAllBuildsFromFile() {
+        if (!fileHandle) return builds; // Fallback to memory array
+        
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        return JSON.parse(text);
+    }
+    // -------------------------------------------------------
 
     function setToggle(type, state) {
         if (type === 'oc') {
@@ -2522,21 +2575,27 @@
     }
 
     // =========================================================
-    // MAIN GENERATOR FUNCTION (FAST FLATTENED LOGIC)
+    // MAIN GENERATOR FUNCTION (FAST FLATTENED LOGIC + OPFS)
     // =========================================================
     
-    const SCAN_BUFFER_SIZE = 5000;
     let precalcGpuConfigs = []; // Stores flattened valid GPU configs
 
-    function generateBuilds() {
+    async function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
+
+        // --- Initialize File System ---
+        const usingFile = await initScanFile();
+        // ------------------------------
 
         // Reset state
         builds = [];
         sortedCache = {};
         precalcGpuConfigs = [];
         document.getElementById('resCount').innerText = "0% Scanned...";
-        document.getElementById('scanStatus').innerText = "";
+        
+        // Indicate Mode
+        const modeText = usingFile ? "Using Disk Mode 💾" : "Using Memory Mode 🧠";
+        document.getElementById('scanStatus').innerText = modeText;
         
         const btn = document.getElementById('generateBtn');
         btn.disabled = true;
@@ -2673,20 +2732,16 @@
         runScanChunk(0, config, lists);
     }
 
-    function runScanChunk(cpuIndex, config, lists) {
+    async function runScanChunk(cpuIndex, config, lists) {
         if (cpuIndex >= lists.validCpu.length) {
-            finishScan(config);
+            await finishScan(config);
             return;
         }
 
         const cpu = lists.validCpu[cpuIndex];
         
         // --- A. Generate Valid Platforms for this CPU ---
-        // A Platform = CPU + Compatible Motherboard + Compatible RAM configuration
-        // We do this first, so we only iterate Valid platforms against the pre-calculated GPU list.
-        
         let validPlatforms = [];
-        
         let ramTiers = [];
         if (config.useRam) {
             let compatibleRam = Array.from(DB.ram.values()).filter(r => 
@@ -2718,18 +2773,13 @@
         }
 
         const stickCounts = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
-
-        // Find compatible mobos for this CPU
         const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
 
         for (const ram of ramTiers) {
             for (const sticks of stickCounts) {
                 if (config.targetRamVal > 0 && ram && (ram.size * sticks) !== config.targetRamVal) continue;
                 
-                // Determine memory type required
                 const memType = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
-                
-                // Filter Mobos for this RAM setup
                 const fitMobos = cpuMobos.filter(m => {
                    if (!m) return true;
                    if (m.ramType !== memType) return false;
@@ -2740,7 +2790,6 @@
                 if (fitMobos.length === 0) continue;
 
                 for (const mobo of fitMobos) {
-                    // Calc CPU Score once per platform
                     let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
                     let liveCpuScore;
                     
@@ -2766,8 +2815,6 @@
         }
 
         // --- B. JOIN: Platform + Pre-calc GPUs ---
-        // This is the flattened loop logic. We iterate platforms against the global GPU list.
-        
         for (const plat of validPlatforms) {
             
             // Check budget headroom
@@ -2775,9 +2822,9 @@
 
             for (const gpuConf of precalcGpuConfigs) {
                 
-                // Check Compatibility: Motherboard PCI Slots & SLI
+                // Check Compatibility
                 if (plat.mobo && gpuConf.count > 1) {
-                    if (plat.mobo.pciSlots < 5) continue; // Basic heuristic
+                    if (plat.mobo.pciSlots < 5) continue; 
                     if (gpuConf.sliType === 'SLI' && !plat.mobo.supportSLI) continue;
                     if (gpuConf.sliType === 'Crossfire' && !plat.mobo.supportCF) continue;
                 }
@@ -2785,17 +2832,13 @@
                 const totalWatts = plat.watts + gpuConf.watts + config.extraW;
                 if (config.limitTotalW && totalWatts > config.limitTotalW) continue;
 
-                // Calculate 3D Score
                 const final3D = calculate3DMark(plat.score, gpuConf.score);
                 if (config.minScore > 0 && final3D < config.minScore) continue;
 
-                // Budget Check (Cheap)
                 let currentTotal = plat.price + gpuConf.price + lists.minAuxCost;
                 if (currentTotal > config.budget) continue;
 
-                // --- EXPENSIVE CHECKS (Case, PSU, Cooler) ---
-                // We only do this if everything else passes
-                
+                // --- EXPENSIVE CHECKS ---
                 let bCase = null;
                 let casePrice = 0;
                 if (config.useCase) {
@@ -2842,8 +2885,8 @@
 
                 if (realTotal > config.budget) continue;
 
-                // PUSH
-                builds.push({
+                // --- SAVE BUILD (To File or Memory) ---
+                await writeBuildToFile({
                     score: final3D,
                     liveCpuScore: plat.score, 
                     gpuScore: gpuConf.score, 
@@ -2859,27 +2902,31 @@
                     case: bCase, cooler, psu, fan, 
                     storages: [...lists.finalStorageList] 
                 });
-
-                // BUFFER CULLING
-                if (builds.length > SCAN_BUFFER_SIZE + 1000) {
-                    sortBuildsArray(builds, config.sort);
-                    builds = builds.slice(0, SCAN_BUFFER_SIZE);
-                }
             }
         }
 
         // Update Progress
         const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
-        document.getElementById('resCount').innerText = `${percent}% Scanned... (CPU ${cpuIndex+1}/${lists.validCpu.length})`;
+        const currentCount = writableStream ? buildCount : builds.length;
+        document.getElementById('resCount').innerText = `${percent}% Scanned... (${formatNumber(currentCount)} builds found)`;
 
         // Next chunk
         setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
     }
 
-    function finishScan(config) {
+    async function finishScan(config) {
+        // Close the stream
+        await closeScanFile();
+        
         const btn = document.getElementById('generateBtn');
         btn.disabled = false;
         btn.innerText = "GENERATE BUILDS";
+
+        // Load all builds back for sorting
+        if (buildCount > 0 && builds.length === 0) {
+            document.getElementById('resCount').innerText = `Loading ${formatNumber(buildCount)} builds from disk...`;
+            builds = await getAllBuildsFromFile();
+        }
 
         sortBuildsArray(builds, config.sort);
 
