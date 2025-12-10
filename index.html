@@ -2496,8 +2496,12 @@
             if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return;
             if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return;
 
-            // Keep cheapest card with same score, VRAM, and multi-GPU support
-            const key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}`;
+            // This line fixes the issue:
+            const maxCap = getMultiGPUCap(g.name, g.length);
+
+            // We add maxCap to the ID so 4-way cards are never treated as duplicates of 2-way cards
+            const key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}|${maxCap}`;
+
             if (!map.has(key) || g.price < map.get(key).price) {
                 map.set(key, g);
             }
