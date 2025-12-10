@@ -2486,6 +2486,7 @@
     }
 
     function getOptimizedGpuList(allGpus, lvl) {
+        // 1. If user selected specific GPUs in the filter menu, return ONLY those.
         if (selectedOptions.gpuNames.size > 0) {
             return allGpus.filter(g => g.level <= lvl && selectedOptions.gpuNames.has(g.name));
         }
@@ -2496,12 +2497,22 @@
             if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return;
             if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return;
 
-            // This line fixes the issue:
+            // Calculate Max Multi-GPU count for this card
             const maxCap = getMultiGPUCap(g.name, g.length);
 
-            // We add maxCap to the ID so 4-way cards are never treated as duplicates of 2-way cards
-            const key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}|${maxCap}`;
+            // Generate a unique key based on performance stats
+            let key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}|${maxCap}`;
 
+            // --- UPDATE: FORCE INCLUDE R9 280 & GTX 970 ---
+            // We append the name to the key for these specific cards.
+            // This prevents them from being filtered out if a "better value" generic card exists.
+            const n = g.name.toLowerCase();
+            if (n.includes('r9 280') || n.includes('gtx 970')) {
+                key += `|${g.name}`; 
+            }
+            // ----------------------------------------------
+
+            // If this key doesn't exist, or if this specific card is CHEAPER than the one stored, save it.
             if (!map.has(key) || g.price < map.get(key).price) {
                 map.set(key, g);
             }
