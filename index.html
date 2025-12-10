@@ -2373,7 +2373,8 @@
     }
     
     // UPDATED CALCULATION LOGIC
-    function calculateCpuScore(cpu, ram, stickCount, mode, useOC, useXMP) {
+    // UPDATED CALCULATION LOGIC
+    function calculateCpuScore(cpu, ram, stickCount, mode, useOC, useXMP, moboLimit = 0) {
         // 1. CPU Frequency Logic (Controlled by useOC)
         let freq = useOC ? cpu.maxFreq : cpu.stdFreq;
         if (!freq) freq = cpu.baseFreq;
@@ -2390,13 +2391,25 @@
         if (ram) {
             activeChannels = Math.min(stickCount, cpu.maxMemChannels);
             
-            // 2. RAM Logic (Controlled by useXMP)
+            // 2. RAM Logic (Controlled by useXMP and Mobo Limits)
+            let baseSpeed = ram.freq;
+
             if (useXMP) {
-                // XMP ON: Use RAM Frequency directly
-                actualMemSpeed = ram.freq;
+                // XMP ON: RAM Freq is the goal, but capped by Mobo Max Speed
+                if (moboLimit > 0 && baseSpeed > moboLimit) {
+                    actualMemSpeed = moboLimit;
+                } else {
+                    actualMemSpeed = baseSpeed;
+                }
             } else {
-                // XMP OFF: Use Lower of (RAM Freq, CPU Default Cap)
-                actualMemSpeed = Math.min(ram.freq, (cpu.defaultMem || 2133));
+                // XMP OFF: RAM Freq is the goal, but capped by Mobo Default Speed
+                // We basically find every unique default motherboard option
+                // We also respect CPU default cap (usually 2133/2666 in PCBS2)
+                let cpuCap = cpu.defaultMem || 2133;
+                let limit = moboLimit > 0 ? moboLimit : 2133; 
+                
+                // Actual is the lowest of: RAM Stick, Mobo Default, CPU Default
+                actualMemSpeed = Math.min(baseSpeed, limit, cpuCap);
             }
         } else {
             activeChannels = cpu.maxMemChannels;
@@ -2608,125 +2621,175 @@
                         if (ram && (ram.size * sticks) !== targetRamVal) continue;
                     }
 
-                    let ramCost = 0;
-                    if (ram) ramCost = ram.price * sticks;
-    
-                    let liveCpuScore;
-                    if (currentMode === 'TSX') liveCpuScore = cpu.scoreTSX;
-                    else liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC, useXMP);
-
-                    if (liveCpuScore === 0) continue; 
-
-                    let mobo = null;
+                    // 1. SELECT MOTHERBOARD CANDIDATES (Exhaustive Speed Search)
+                    let moboTiers = [];
                     if (useMobo) {
                         const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
                         const maxSelectedGpu = Math.max(...selectedGpuCounts);
                         const minPci = maxSelectedGpu > 1 ? 5 : 0;
-                        const found = allMobos.find(m =>
+                        
+                        // A. Find ALL fitting motherboards based on physical/socket constraints
+                        let candidates = allMobos.filter(m =>
                             m.level <= lvl &&
                             m.socket === cpu.socket &&
                             m.ramType === type &&
-                            (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name))
+                            m.pciSlots >= minPci &&
+                            (selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name)) &&
+                            !(sticks === 4 && m.size === 'Mini-ITX') // Skip Mini-ITX for 4 sticks
                         );
-                        if (!found) continue; 
-                        mobo = found; 
-                        if (sticks === 4 && mobo.size === 'Mini-ITX') continue;
+
+                        if (candidates.length === 0) continue;
+
+                        // B. Group by the relevant Speed Property
+                        // If XMP is ON, we separate boards by their Max Speed.
+                        // If XMP is OFF, we separate boards by their Default Speed.
+                        const speedProperty = useXMP ? 'maxMemSpeed' : 'defaultMemSpeed';
+                        
+                        // Use a Map to bucket boards:  Speed -> Array of Boards
+                        const speedMap = new Map();
+                        
+                        candidates.forEach(m => {
+                            let s = m[speedProperty] || 0;
+                            if (!speedMap.has(s)) speedMap.set(s, []);
+                            speedMap.get(s).push(m);
+                        });
+
+                        // C. Select Representative Boards for EACH Speed Tier
+                        // This ensures "Every Possibility" is tested. 
+                        let uniqueSpeeds = Array.from(speedMap.keys()).sort((a,b) => a-b);
+                        
+                        uniqueSpeeds.forEach(speed => {
+                            let boardsAtThisSpeed = speedMap.get(speed);
+                            // Sort by price to get the best value for this specific speed tier
+                            boardsAtThisSpeed.sort((a,b) => a.price - b.price);
+                            // Push the cheapest board of this specific speed
+                            moboTiers.push(boardsAtThisSpeed[0]);
+                        });
+
+                    } else {
+                        moboTiers.push(null); // No motherboard case
                     }
 
-                    for (const gpuCnt of selectedGpuCounts) {
+                    // Loop through the selected Motherboard Tiers
+                    for (const mobo of moboTiers) {
                         if (builds.length >= maxPoolSize) break;
-                        if (mobo && gpuCnt > 1 && mobo.pciSlots < 5) continue;
 
-                        for (const gpu of validGpuBase) {
-                            if (gpuCnt === 2 && !gpu.score2) continue;
-                            if (gpuCnt === 3 && !gpu.score3) continue;
-                            if (gpuCnt === 4 && !gpu.score4) continue;
-                            if (gpuCnt > 1) {
-                                const maxCap = getMultiGPUCap(gpu.name, gpu.length);
-                                if (maxCap < gpuCnt) continue;
-                                if (mobo) {
-                                    if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
-                                    if (gpu.sliType === 'Crossfire' && !mobo.supportCF) continue;
-                                }
-                            }
-
-                            let gpuScore = gpuCnt === 1 ? gpu.score :
-                                          gpuCnt === 2 ? gpu.score2 :
-                                          gpuCnt === 3 ? gpu.score3 : gpu.score4;
-                            if (!gpuScore) continue;
-
-                            let bCase = null;
-                            if (useCase) {
-                                const found = allCases.find(c => {
-                                    if (c.level > lvl) return false;
-                                    if (c.maxGpuLen < gpu.length) return false;
-                                    if (mobo && !c.moboSizes.includes(mobo.size)) return false;
-                                    if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-                                    if (gpuCnt > 1 && c.gpuSlots < 3) return false;
-                                    if (requiredSSDSlots > c.ssdSlots) return false;
-                                    if (requiredHDDSlots > c.hddSlots) return false;
-                                    return true;
-                                });
-                                if (!found) continue;
-                                bCase = found; 
-                            }
-
-                            let cooler = null;
-                            if (useCooler) {
-                                cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
-                                if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
-                            }
-
-                            let psu = null;
-                            const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
-                            if (usePsu) {
-                                const found = allPsu.find(p => {
-                                    if (p.level > lvl) return false;
-                                    if (p.watts < totalWatts) return false;
-                                    if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
-                                    return true;
-                                });
-                                if (!found) continue;
-                                psu = found;
-                            }
-
-                            let fan = null, fanCost = 0;
-                            if (useFan && bCase) {
-                                const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
-                                if(found) {
-                                    fan = found;
-                                    fanCost = found.price;
-                                }
-                            }
-
-                            if (limitTotalW && totalWatts > limitTotalW) continue;
-
-                            let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + totalStorageCost;
-                            if (mobo) total += mobo.price;
-                            if (bCase) total += bCase.price;
-                            if (cooler) total += cooler.price;
-                            if (psu) total += psu.price;
-
-                            if (total > budget) continue;
-
-                            const final3D = calculate3DMark(liveCpuScore, gpuScore);
-                            if (minScore > 0 && final3D < minScore) continue;
-
-                            builds.push({
-                                score: final3D,
-                                liveCpuScore: liveCpuScore, 
-                                gpuScore: gpuScore, 
-                                diff: final3D - target,
-                                price: total,
-                                watts: totalWatts,
-                                cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
-                                case: bCase, cooler, psu, fan, 
-                                storages: [...finalStorageList] 
-                            });
-                            
-                            if (builds.length >= maxPoolSize) break;
+                        // DEFINE LIMIT FOR CALCULATION
+                        let moboLimit = 0;
+                        if (mobo) {
+                            moboLimit = useXMP ? mobo.maxMemSpeed : mobo.defaultMemSpeed;
                         }
-                    }
+
+                        // PASS LIMIT TO CALCULATOR
+                        let liveCpuScore;
+                        if (currentMode === 'TSX') {
+                            liveCpuScore = cpu.scoreTSX;
+                        } else {
+                            liveCpuScore = calculateCpuScore(cpu, ram, sticks, currentMode, useOC, useXMP, moboLimit);
+                        }
+
+                        if (liveCpuScore === 0) continue;
+
+                        let ramCost = 0;
+                        if (ram) ramCost = ram.price * sticks;
+
+                        for (const gpuCnt of selectedGpuCounts) {
+                            if (builds.length >= maxPoolSize) break;
+                            
+                            // Re-check Mobo PCI slots
+                            if (mobo && gpuCnt > 1 && mobo.pciSlots < 5) continue;
+
+                            for (const gpu of validGpuBase) {
+                                if (gpuCnt === 2 && !gpu.score2) continue;
+                                if (gpuCnt === 3 && !gpu.score3) continue;
+                                if (gpuCnt === 4 && !gpu.score4) continue;
+                                if (gpuCnt > 1) {
+                                    const maxCap = getMultiGPUCap(gpu.name, gpu.length);
+                                    if (maxCap < gpuCnt) continue;
+                                    if (mobo) {
+                                        if (gpu.sliType === 'SLI' && !mobo.supportSLI) continue;
+                                        if (gpu.sliType === 'Crossfire' && !mobo.supportCF) continue;
+                                    }
+                                }
+
+                                let gpuScore = gpuCnt === 1 ? gpu.score :
+                                            gpuCnt === 2 ? gpu.score2 :
+                                            gpuCnt === 3 ? gpu.score3 : gpu.score4;
+                                if (!gpuScore) continue;
+
+                                let bCase = null;
+                                if (useCase) {
+                                    const found = allCases.find(c => {
+                                        if (c.level > lvl) return false;
+                                        if (c.maxGpuLen < gpu.length) return false;
+                                        if (mobo && !c.moboSizes.includes(mobo.size)) return false;
+                                        if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
+                                        if (gpuCnt > 1 && c.gpuSlots < 3) return false;
+                                        if (requiredSSDSlots > c.ssdSlots) return false;
+                                        if (requiredHDDSlots > c.hddSlots) return false;
+                                        return true;
+                                    });
+                                    if (!found) continue;
+                                    bCase = found; 
+                                }
+
+                                let cooler = null;
+                                if (useCooler) {
+                                    cooler = allCoolers.find(c => checkFit('cooler', c, {cpu, case: bCase}));
+                                    if(!cooler) cooler = { name: "None (No Fit)", price: 0, level: 0, type: "N/A", height: 0, size: 0, flow: 0, sockets: [] };
+                                }
+
+                                let psu = null;
+                                const totalWatts = cpu.watts + (gpu.watts * gpuCnt) + extraW;
+                                if (usePsu) {
+                                    const found = allPsu.find(p => {
+                                        if (p.level > lvl) return false;
+                                        if (p.watts < totalWatts) return false;
+                                        if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
+                                        return true;
+                                    });
+                                    if (!found) continue;
+                                    psu = found;
+                                }
+
+                                let fan = null, fanCost = 0;
+                                if (useFan && bCase) {
+                                    const found = allFans.find(f => checkFit('fan', f, {case: bCase}));
+                                    if(found) {
+                                        fan = found;
+                                        fanCost = found.price;
+                                    }
+                                }
+
+                                if (limitTotalW && totalWatts > limitTotalW) continue;
+
+                                let total = cpu.price + (gpu.price * gpuCnt) + ramCost + fanCost + totalStorageCost;
+                                if (mobo) total += mobo.price;
+                                if (bCase) total += bCase.price;
+                                if (cooler) total += cooler.price;
+                                if (psu) total += psu.price;
+
+                                if (total > budget) continue;
+
+                                const final3D = calculate3DMark(liveCpuScore, gpuScore);
+                                if (minScore > 0 && final3D < minScore) continue;
+
+                                builds.push({
+                                    score: final3D,
+                                    liveCpuScore: liveCpuScore, 
+                                    gpuScore: gpuScore, 
+                                    diff: final3D - target,
+                                    price: total,
+                                    watts: totalWatts,
+                                    cpu, gpu, gpuCnt, ram, ramSticks: sticks, mobo,
+                                    case: bCase, cooler, psu, fan, 
+                                    storages: [...finalStorageList] 
+                                });
+                                
+                                if (builds.length >= maxPoolSize) break;
+                            }
+                        }
+                    } // End motherboard tiers loop
                 }
             } 
         }
