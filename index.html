@@ -1999,16 +1999,23 @@
         if (!Loaded.cpu) return;
 
         const currentLvl = parseInt(document.getElementById('level').value) || 30;
-        let gpuCnt = 1; 
-        if(selectedOptions.gpuCount.has(2) || selectedOptions.gpuCount.has(3) || selectedOptions.gpuCount.has(4)) gpuCnt = 2;
+        
+        // --- CHANGED LOGIC START ---
+        // We only enforce limits on the Dropdowns if the user has explicitly 
+        // ruled out Single GPU builds.
+        const hasSingle = selectedOptions.gpuCount.has(1);
+        const hasMulti = selectedOptions.gpuCount.has(2) || selectedOptions.gpuCount.has(3) || selectedOptions.gpuCount.has(4);
+        const isDefault = selectedOptions.gpuCount.size === 0; // "Any" includes Single
 
         let moboFilterMinPCI = 0;
         let caseFilterMinGPU = 0;
 
-        if (gpuCnt > 1) {
+        // Only apply filters if we are STRICTLY doing multi-GPU (No default, No Single selected)
+        if (!isDefault && !hasSingle && hasMulti) {
             moboFilterMinPCI = 5;
             caseFilterMinGPU = 3;
         }
+        // --- CHANGED LOGIC END ---
 
         const cpus = Array.from(DB.cpu.values()).filter(c => c.level <= currentLvl);
         const gpus = Array.from(DB.gpu.values()).filter(g => g.level <= currentLvl);
@@ -2622,8 +2629,16 @@
                     let fittingMobos = [];
                     if (useMobo) {
                         const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
-                        const maxSelectedGpu = Math.max(...selectedGpuCounts);
-                        const minPci = maxSelectedGpu > 1 ? 5 : 0; // Heuristic: Multi-GPU needs ATX/E-ATX usually
+                        
+                        // --- CHANGED LOGIC START ---
+                        // Instead of checking maxSelectedGpu, we check if Single GPU (1) is an option.
+                        // If Single GPU is an option, we CANNOT enforce the 5-slot limit yet.
+                        // We set minPci to 0 so small boards are included in the search.
+                        // The loop further down (step 4) will still reject small boards 
+                        // SPECIFICALLY when gpuCnt > 1.
+                        const allowsSingleGpu = selectedGpuCounts.includes(1);
+                        const minPci = allowsSingleGpu ? 0 : 5; 
+                        // --- CHANGED LOGIC END ---
 
                         // Filter ALL matching mobos instead of just finding one
                         fittingMobos = allMobos.filter(m =>
@@ -3247,4 +3262,3 @@
 </script>
 </body>
 </html>
-
