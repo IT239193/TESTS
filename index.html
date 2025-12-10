@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - File Stream Turbo</title>
+    <title>PCBS2 Ultimate Pro Builder - Full Unlocked</title>
     <!-- SQLite WASM -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.min.js"></script>
     <style>
@@ -2018,8 +2018,20 @@
                 base.watts = getNum(cells, 'Wattage');
                 base.vram = getNum(cells, 'VRAM (GB)');
                 base.length = getNum(cells, 'Length');
-                base.multi = get(cells, 'Double GPU supported') === 'Yes';
-                base.sliType = get(cells, 'Double GPU SLI') === 'Yes' ? 'SLI' : 'Crossfire';
+                
+                // MULTI GPU LOGIC CHANGE
+                const doubleSupported = get(cells, 'Double GPU supported') === 'Yes';
+                const doubleSLI = get(cells, 'Double GPU SLI') === 'Yes';
+                base.multi = doubleSupported;
+                
+                if (doubleSLI) {
+                    base.sliType = 'SLI';
+                } else if (doubleSupported) {
+                    base.sliType = 'Crossfire';
+                } else {
+                    base.sliType = 'None';
+                }
+
                 base.isWater = n.includes('water');
                 base.baseCore = get(cells, 'Base Core Clock Freq');
                 base.baseMem = get(cells, 'Base Mem Clock Freq');
@@ -2150,7 +2162,7 @@
             let str = "";
             if (currentDataTab === 'gpu') {
                 const cooling = item.isWater ? "Water" : "Air";
-                str = `Single GPU Score: ${item.rawScore || ""} | Double GPU Score ${item.rawScore2 || ""} | Triple GPU Score ${item.rawScore3 || ""} | Quad GPU Score ${item.rawScore4 || ""} | VRAM ${item.vram} | Length ${item.length} | Watt ${item.watts} | ${cooling} | Base Core/Max Core: ${item.baseCore || "?"}/${item.maxCore || "?"} MHz | Base Mem/Max Mem: ${item.baseMem || "?"}/${item.maxMem || "?"} MHz | Level ${item.level} | Price ${item.price} | Sell Price ${item.sellPrice} | Slot size: ${item.slotSize} |`;
+                str = `Single GPU Score: ${item.rawScore || ""} | Double GPU Score ${item.rawScore2 || ""} | Triple GPU Score ${item.rawScore3 || ""} | Quad GPU Score ${item.rawScore4 || ""} | VRAM ${item.vram} | Length ${item.length} | Watt ${item.watts} | ${cooling} | Base Core/Max Core: ${item.baseCore || "?"}/${item.maxCore || "?"} MHz | Base Mem/Max Mem: ${item.baseMem || "?"}/${item.maxMem || "?"} MHz | Level ${item.level} | Price ${item.price} | Sell Price ${item.sellPrice} | Slot size: ${item.slotSize} | Multi-GPU Type: ${item.sliType}`;
             } else {
                 const freqStr = `${item.baseFreq || "?"} / ${item.freqMid || "?"} / ${item.maxFreq || "?"}`;
                 str = `Basic Cpu Score: ${item.scoreTS} | Basic CPU Score (TSX): ${item.scoreTSX} | OC Score: ${item.ocScore} | Socket ${item.socket} | ${item.cores}C | BaseMidMaxFreq: ${freqStr} MHz | VoltageMinMax: ${item.voltage || "?"}/${item.maxVoltage || "?"} V | Can Delid ${item.canDelid} | Sell Price : ${item.sellPrice} | Price ${item.price} | Level ${item.level} | Max Memory Channels: ${item.maxMemChannelsRaw || "?"} | Supported Memory Types ${item.memTypes}`;
@@ -2614,57 +2626,22 @@
     // =========================================================
 
     function getOptimizedMoboList(allMobos, lvl) {
+        // Return ALL mobos under level cap, removing any "Unique Spec" grouping
         if (selectedOptions.moboNames.size > 0) {
             return allMobos.filter(m => m.level <= lvl && selectedOptions.moboNames.has(m.name));
         }
-
-        const map = new Map();
-        allMobos.forEach(m => {
-            if (m.level > lvl) return;
-            // Group by socket, ram type, size, PCI slots, and Max Memory Speed
-            const key = `${m.socket}|${m.ramType}|${m.size}|${m.pciSlots}|${m.maxMemSpeed}|${m.supportSLI}|${m.supportCF}`;
-            if (!map.has(key) || m.price < map.get(key).price) {
-                map.set(key, m);
-            }
-        });
-
-        return Array.from(map.values()).sort((a,b) => a.price - b.price);
+        return allMobos.filter(m => m.level <= lvl);
     }
 
     function getOptimizedGpuList(allGpus, lvl) {
-        // 1. If user selected specific GPUs in the filter menu, return ONLY those.
-        if (selectedOptions.gpuNames.size > 0) {
-            return allGpus.filter(g => g.level <= lvl && selectedOptions.gpuNames.has(g.name));
-        }
-
-        const map = new Map();
-        allGpus.forEach(g => {
-            if (g.level > lvl) return;
-            if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return;
-            if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return;
-
-            // Calculate Max Multi-GPU count for this card
-            const maxCap = getMultiGPUCap(g.name, g.length);
-
-            // Generate a unique key based on performance stats
-            let key = `${g.score}|${g.vram}|${g.watts}|${g.multi}|${g.isWater}|${maxCap}`;
-
-            // --- UPDATE: FORCE INCLUDE R9 280 & GTX 970 ---
-            // We append the name to the key for these specific cards.
-            // This prevents them from being filtered out if a "better value" generic card exists.
-            const n = g.name.toLowerCase();
-            if (n.includes('r9 280') || n.includes('gtx 970')) {
-                key += `|${g.name}`; 
-            }
-            // ----------------------------------------------
-
-            // If this key doesn't exist, or if this specific card is CHEAPER than the one stored, save it.
-            if (!map.has(key) || g.price < map.get(key).price) {
-                map.set(key, g);
-            }
-        });
-        
-        return Array.from(map.values()).sort((a,b) => b.score - a.score);
+        // Return ALL GPUs under level cap, removing any "Unique Spec" grouping
+        return allGpus.filter(g => {
+            if (g.level > lvl) return false;
+            if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
+            if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return false;
+            if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
+            return true;
+        }).sort((a,b) => b.score - a.score);
     }
 
     // =========================================================
@@ -2964,7 +2941,8 @@
                 for (const gpuConf of precalcGpuConfigs) {
                     
                     if (plat.mobo && gpuConf.count > 1) {
-                        if (plat.mobo.pciSlots < 5) continue;
+                        // MULTI GPU CONSTRAINTS
+                        if (plat.mobo.pciSlots < 5) continue; // PCI Slot logic
                         if (gpuConf.sliType === 'SLI' && !plat.mobo.supportSLI) continue;
                         if (gpuConf.sliType === 'Crossfire' && !plat.mobo.supportCF) continue;
                     }
@@ -2985,7 +2963,8 @@
                         bCase = lists.allCases.find(c => {
                             if (c.maxGpuLen < gpuConf.gpu.length) return false;
                             if (plat.mobo && !c.moboSizes.includes(plat.mobo.size)) return false;
-                            if (gpuConf.count > 1 && c.gpuSlots < 3) return false;
+                            // CASE GPU SLOT LOGIC FOR MULTI GPU
+                            if (gpuConf.count > 1 && c.gpuSlots < 3) return false; 
                             if (lists.reqSSDSlots > c.ssdSlots) return false;
                             if (lists.reqHDDSlots > c.hddSlots) return false;
                             return true;
