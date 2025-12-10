@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Live Calculator (SQL Turbo)</title>
+    <title>PCBS2 Ultimate Pro Builder - File Stream Turbo</title>
     <!-- SQLite WASM -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.min.js"></script>
     <style>
@@ -33,7 +33,6 @@
             --brand-ram: #e0b0ff;
             --brand-aux: #e0b0ff;
             
-            /* Dark Grey for Generic/Case */
             --brand-generic: #2c3e50; 
         }
 
@@ -481,6 +480,14 @@
             text-align: center;
         }
 
+        /* Generate Button Area */
+        .generate-area {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
         .btn-generate {
             width: 100%;
             padding: 18px;
@@ -494,7 +501,6 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             transition: transform 0.2s, box-shadow 0.2s;
-            margin-top: 20px;
         }
         .btn-generate:hover {
             transform: translateY(-3px);
@@ -504,6 +510,16 @@
             background: #555;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .turbo-toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(46, 204, 113, 0.1);
+            border: 1px solid var(--success);
+            padding: 10px;
+            border-radius: 8px;
         }
 
         /* Results Meta Bar */
@@ -1213,7 +1229,7 @@
                     <input type="number" id="level" value="30" min="1" oninput="refreshDropdowns()">
                 </div>
                 <div class="input-group">
-                    <label>Max Results Limit (for Display)</label>
+                    <label>Max Results Limit (SQL Mode)</label>
                     <input type="text" id="resLimit" value="2,000" title="The number of results to display (Scan is always 100%)">
                 </div>
                 <div class="input-group">
@@ -1505,7 +1521,15 @@
                 </div>
             </div>
             
-            <button class="btn-generate" id="generateBtn" onclick="generateBuilds()">GENERATE BUILDS</button>
+            <div class="generate-area">
+                <button class="btn-generate" id="generateBtn" onclick="generateBuilds()">GENERATE BUILDS</button>
+                <div class="turbo-toggle-container">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="turboMode">
+                        <label for="turboMode">⚡ Turbo Mode: Save results to local file (Recommended for large scans)</label>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Results Meta Bar -->
@@ -1597,6 +1621,12 @@
     // SQLite Global
     let sqlDB = null;
     let buildCount = 0;
+    
+    // File Access Globals
+    let fileHandle = null;
+    let writableStream = null;
+    let isTurbo = false;
+    let writeBuffer = [];
 
     const selectedOptions = {
         vram: new Set(),
@@ -2646,6 +2676,9 @@
     async function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
         
+        isTurbo = document.getElementById('turboMode').checked;
+        writeBuffer = [];
+
         // Ensure SQL is ready
         if (!sqlDB) {
             document.getElementById('loadingOverlay').style.display = 'flex';
@@ -2654,17 +2687,38 @@
             document.getElementById('loadingOverlay').style.display = 'none';
         }
 
+        // Handle Turbo Mode File Setup
+        if (isTurbo) {
+            if (!window.showSaveFilePicker) {
+                alert("Your browser does not support the File System Access API (Chrome/Edge/Opera only). Running standard mode.");
+                isTurbo = false;
+                document.getElementById('turboMode').checked = false;
+            } else {
+                try {
+                    fileHandle = await window.showSaveFilePicker({
+                        suggestedName: 'pcbs2-scan-results.json',
+                        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }]
+                    });
+                    writableStream = await fileHandle.createWritable();
+                    await writableStream.write('['); // Start JSON array
+                } catch (e) {
+                    console.log("User cancelled save", e);
+                    return; // Stop scan if they cancel save
+                }
+            }
+        }
+
         // Reset state
         builds = [];
         precalcGpuConfigs = [];
         clearSQLite();
         
         document.getElementById('resCount').innerText = "0% Scanned...";
-        document.getElementById('scanStatus').innerText = "Running SQL Turbo Scan...";
+        document.getElementById('scanStatus').innerText = isTurbo ? "Streaming to Disk..." : "Running SQL Memory Scan...";
         
         const btn = document.getElementById('generateBtn');
         btn.disabled = true;
-        btn.innerText = "SCANNING...";
+        btn.innerText = isTurbo ? "SAVING TO FILE..." : "SCANNING...";
 
         // --- 1. GATHER INPUTS ---
         const config = {
@@ -2793,211 +2847,305 @@
 
         lists.validMobos = getOptimizedMoboList(Array.from(DB.mobo.values()), config.lvl);
         
-        // Start Async Processing
-        runScanChunk(0, config, lists);
+        // Start Processing
+        await startScanLoop(config, lists);
     }
 
-    function runScanChunk(cpuIndex, config, lists) {
-        if (cpuIndex >= lists.validCpu.length) {
-            finishScan(config);
-            return;
-        }
-
-        const cpu = lists.validCpu[cpuIndex];
+    // UPDATED LOOP FOR ASYNC FILE WRITING
+    async function startScanLoop(config, lists) {
         
-        // --- A. Generate Valid Platforms for this CPU ---
-        let validPlatforms = [];
+        const cpuCount = lists.validCpu.length;
         
-        let ramTiers = [];
-        if (config.useRam) {
-            let compatibleRam = Array.from(DB.ram.values()).filter(r => 
-                r.level <= config.lvl && 
-                cpu.memTypes.includes(r.type) && 
-                (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
-                (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) &&
-                (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) && 
-                (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.size)) 
-            );
+        // Use an iterative loop with await inside for better flow control than recursion
+        for (let cpuIndex = 0; cpuIndex < cpuCount; cpuIndex++) {
             
-            if (config.useRamPerfMode && selectedOptions.ramNames.size === 0) {
-                // Only keep best value RAM per unique spec
-                const bestValueBySpec = new Map();
-                for (const r of compatibleRam) {
-                    const mfgr = r.mfgr || "Generic";
-                    const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
-                    if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
-                        bestValueBySpec.set(key, r);
+            // Allow UI to breathe
+            if (cpuIndex % 5 === 0) {
+                 await new Promise(requestAnimationFrame);
+                 const percent = Math.floor(((cpuIndex + 1) / cpuCount) * 100);
+                 document.getElementById('resCount').innerText = `${percent}% Scanned... (${formatNumber(buildCount)} found)`;
+            }
+
+            const cpu = lists.validCpu[cpuIndex];
+            
+            // --- A. Generate Valid Platforms for this CPU ---
+            let validPlatforms = [];
+            
+            let ramTiers = [];
+            if (config.useRam) {
+                let compatibleRam = Array.from(DB.ram.values()).filter(r => 
+                    r.level <= config.lvl && 
+                    cpu.memTypes.includes(r.type) && 
+                    (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
+                    (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) &&
+                    (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) && 
+                    (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.size)) 
+                );
+                
+                if (config.useRamPerfMode && selectedOptions.ramNames.size === 0) {
+                    const bestValueBySpec = new Map();
+                    for (const r of compatibleRam) {
+                        const mfgr = r.mfgr || "Generic";
+                        const key = `${r.type}-${mfgr}-${r.freq}-${r.size}`; 
+                        if (!bestValueBySpec.has(key) || r.price < bestValueBySpec.get(key).price) {
+                            bestValueBySpec.set(key, r);
+                        }
                     }
+                    ramTiers = Array.from(bestValueBySpec.values());
+                } else {
+                    ramTiers = compatibleRam;
                 }
-                ramTiers = Array.from(bestValueBySpec.values());
+                ramTiers.sort((a,b) => b.freq - a.freq);
             } else {
-                ramTiers = compatibleRam;
+                ramTiers.push(null); 
             }
-            ramTiers.sort((a,b) => b.freq - a.freq);
-        } else {
-            ramTiers.push(null); 
-        }
 
-        const stickCounts = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
-        const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
+            const stickCounts = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
+            const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
 
-        for (const ram of ramTiers) {
-            for (const sticks of stickCounts) {
-                if (config.targetRamVal > 0 && ram && (ram.size * sticks) !== config.targetRamVal) continue;
-                const memType = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
-                
-                const fitMobos = cpuMobos.filter(m => {
-                   if (!m) return true;
-                   if (m.ramType !== memType) return false;
-                   if (sticks === 4 && m.size === 'Mini-ITX') return false;
-                   return true;
-                });
-
-                if (fitMobos.length === 0) continue;
-
-                for (const mobo of fitMobos) {
-                    let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
-                    let liveCpuScore;
+            for (const ram of ramTiers) {
+                for (const sticks of stickCounts) {
+                    if (config.targetRamVal > 0 && ram && (ram.size * sticks) !== config.targetRamVal) continue;
+                    const memType = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
                     
-                    if (config.currentMode === 'TSX') {
-                        liveCpuScore = cpu.scoreTSX;
-                    } else {
-                        liveCpuScore = calculateCpuScore(cpu, ram, sticks, config.currentMode, config.useOC, config.useXMP, moboLimit);
+                    const fitMobos = cpuMobos.filter(m => {
+                    if (!m) return true;
+                    if (m.ramType !== memType) return false;
+                    if (sticks === 4 && m.size === 'Mini-ITX') return false;
+                    return true;
+                    });
+
+                    if (fitMobos.length === 0) continue;
+
+                    for (const mobo of fitMobos) {
+                        let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
+                        let liveCpuScore;
+                        
+                        if (config.currentMode === 'TSX') {
+                            liveCpuScore = cpu.scoreTSX;
+                        } else {
+                            liveCpuScore = calculateCpuScore(cpu, ram, sticks, config.currentMode, config.useOC, config.useXMP, moboLimit);
+                        }
+
+                        if (liveCpuScore === 0) continue;
+
+                        validPlatforms.push({
+                            cpu: cpu,
+                            ram: ram,
+                            sticks: sticks,
+                            mobo: mobo,
+                            score: liveCpuScore,
+                            price: cpu.price + (ram ? (ram.price * sticks) : 0) + (mobo ? mobo.price : 0),
+                            watts: cpu.watts
+                        });
+                    }
+                }
+            }
+
+            // --- B. Generate Builds ---
+            // If not turbo, use SQL transaction. If turbo, buffer writes.
+            if (!isTurbo) sqlDB.run("BEGIN TRANSACTION");
+            
+            // Prepare statement only if NOT turbo (Turbo builds JSON strings manually)
+            let stmt = null;
+            if (!isTurbo) {
+                stmt = sqlDB.prepare(`
+                    INSERT INTO builds (
+                        score, liveCpuScore, gpuScore, diff, price, watts,
+                        cpuName, gpuName, gpuCnt, ramName, ramSticks,
+                        moboName, caseName, coolerName, psuName, fanName, storageNames
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+            }
+
+            for (const plat of validPlatforms) {
+                if (plat.price + lists.minAuxCost > config.budget) continue;
+
+                for (const gpuConf of precalcGpuConfigs) {
+                    
+                    if (plat.mobo && gpuConf.count > 1) {
+                        if (plat.mobo.pciSlots < 5) continue;
+                        if (gpuConf.sliType === 'SLI' && !plat.mobo.supportSLI) continue;
+                        if (gpuConf.sliType === 'Crossfire' && !plat.mobo.supportCF) continue;
                     }
 
-                    if (liveCpuScore === 0) continue;
+                    const totalWatts = plat.watts + gpuConf.watts + config.extraW;
+                    if (config.limitTotalW && totalWatts > config.limitTotalW) continue;
 
-                    validPlatforms.push({
-                        cpu: cpu,
-                        ram: ram,
-                        sticks: sticks,
-                        mobo: mobo,
-                        score: liveCpuScore,
-                        price: cpu.price + (ram ? (ram.price * sticks) : 0) + (mobo ? mobo.price : 0),
-                        watts: cpu.watts
-                    });
+                    const final3D = calculate3DMark(plat.score, gpuConf.score);
+                    if (config.minScore > 0 && final3D < config.minScore) continue;
+
+                    let currentTotal = plat.price + gpuConf.price + lists.minAuxCost;
+                    if (currentTotal > config.budget) continue;
+
+                    // EXPENSIVE CHECKS
+                    let bCase = null;
+                    let casePrice = 0;
+                    if (config.useCase) {
+                        bCase = lists.allCases.find(c => {
+                            if (c.maxGpuLen < gpuConf.gpu.length) return false;
+                            if (plat.mobo && !c.moboSizes.includes(plat.mobo.size)) return false;
+                            if (gpuConf.count > 1 && c.gpuSlots < 3) return false;
+                            if (lists.reqSSDSlots > c.ssdSlots) return false;
+                            if (lists.reqHDDSlots > c.hddSlots) return false;
+                            return true;
+                        });
+                        if (!bCase) continue; 
+                        casePrice = bCase.price;
+                    }
+
+                    let cooler = null;
+                    let coolerPrice = 0;
+                    if (config.useCooler) {
+                        cooler = lists.allCoolers.find(c => checkFit('cooler', c, {cpu: plat.cpu, case: bCase}));
+                        if(!cooler) cooler = { name: "None (No Fit)", price: 0, height: 0, size: 0, flow: 0, type: "N/A" };
+                        coolerPrice = cooler.price;
+                    }
+
+                    let psu = null;
+                    let psuPrice = 0;
+                    if (config.usePsu) {
+                        psu = lists.allPsu.find(p => {
+                            if (p.watts < totalWatts) return false;
+                            if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
+                            return true;
+                        });
+                        if (!psu) continue;
+                        psuPrice = psu.price;
+                    }
+
+                    let fan = null;
+                    let fanPrice = 0;
+                    if (config.useFan && bCase) {
+                        fan = lists.allFans.find(f => checkFit('fan', f, {case: bCase}));
+                        if(fan) fanPrice = fan.price;
+                    }
+
+                    let realTotal = plat.price + gpuConf.price + casePrice + coolerPrice + psuPrice + fanPrice + lists.totalStorageCost;
+                    if (realTotal > config.budget) continue;
+
+                    // *** CORE LOGIC SPLIT ***
+                    const storageNameList = JSON.stringify(lists.finalStorageList.map(s => s.name));
+                    
+                    if (isTurbo) {
+                        // 1. Build Flat JSON Object
+                        const buildObj = {
+                            score: final3D,
+                            liveCpuScore: plat.score,
+                            gpuScore: gpuConf.score,
+                            diff: final3D - config.target,
+                            price: realTotal,
+                            watts: totalWatts,
+                            cpuName: plat.cpu.name,
+                            gpuName: gpuConf.gpu.name,
+                            gpuCnt: gpuConf.count,
+                            ramName: plat.ram?.name || null,
+                            ramSticks: plat.sticks,
+                            moboName: plat.mobo?.name || null,
+                            caseName: bCase?.name || null,
+                            coolerName: cooler?.name || null,
+                            psuName: psu?.name || null,
+                            fanName: fan?.name || null,
+                            storageNames: storageNameList
+                        };
+                        
+                        // 2. Buffer Write
+                        writeBuffer.push(JSON.stringify(buildObj));
+                        
+                        // 3. Flush if buffer full
+                        if (writeBuffer.length >= 500) {
+                            // First build needs logic? Handled by initial '[' outside
+                            const chunk = (buildCount > 0 ? ",\n" : "") + writeBuffer.join(",\n");
+                            await writableStream.write(chunk);
+                            writeBuffer = []; // Clear RAM
+                        }
+                    } else {
+                        // STANDARD SQL LOGIC
+                        stmt.run([
+                            final3D,
+                            plat.score,
+                            gpuConf.score,
+                            final3D - config.target,
+                            realTotal,
+                            totalWatts,
+                            plat.cpu.name,
+                            gpuConf.gpu.name,
+                            gpuConf.count,
+                            plat.ram?.name || null,
+                            plat.sticks,
+                            plat.mobo?.name || null,
+                            bCase?.name || null,
+                            cooler?.name || null,
+                            psu?.name || null,
+                            fan?.name || null,
+                            storageNameList
+                        ]);
+                    }
+                    
+                    buildCount++;
                 }
             }
-        }
-
-        // --- B. SQL TRANSACTION: Platform + Pre-calc GPUs ---
-        // We write to DB immediately inside a transaction
-        
-        sqlDB.run("BEGIN TRANSACTION");
-        
-        const stmt = sqlDB.prepare(`
-            INSERT INTO builds (
-                score, liveCpuScore, gpuScore, diff, price, watts,
-                cpuName, gpuName, gpuCnt, ramName, ramSticks,
-                moboName, caseName, coolerName, psuName, fanName, storageNames
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        for (const plat of validPlatforms) {
-            if (plat.price + lists.minAuxCost > config.budget) continue;
-
-            for (const gpuConf of precalcGpuConfigs) {
-                
-                if (plat.mobo && gpuConf.count > 1) {
-                    if (plat.mobo.pciSlots < 5) continue;
-                    if (gpuConf.sliType === 'SLI' && !plat.mobo.supportSLI) continue;
-                    if (gpuConf.sliType === 'Crossfire' && !plat.mobo.supportCF) continue;
-                }
-
-                const totalWatts = plat.watts + gpuConf.watts + config.extraW;
-                if (config.limitTotalW && totalWatts > config.limitTotalW) continue;
-
-                const final3D = calculate3DMark(plat.score, gpuConf.score);
-                if (config.minScore > 0 && final3D < config.minScore) continue;
-
-                let currentTotal = plat.price + gpuConf.price + lists.minAuxCost;
-                if (currentTotal > config.budget) continue;
-
-                // --- EXPENSIVE CHECKS (Case, PSU, Cooler) ---
-                let bCase = null;
-                let casePrice = 0;
-                if (config.useCase) {
-                    bCase = lists.allCases.find(c => {
-                        if (c.maxGpuLen < gpuConf.gpu.length) return false;
-                        if (plat.mobo && !c.moboSizes.includes(plat.mobo.size)) return false;
-                        if (gpuConf.count > 1 && c.gpuSlots < 3) return false;
-                        if (lists.reqSSDSlots > c.ssdSlots) return false;
-                        if (lists.reqHDDSlots > c.hddSlots) return false;
-                        return true;
-                    });
-                    if (!bCase) continue; 
-                    casePrice = bCase.price;
-                }
-
-                let cooler = null;
-                let coolerPrice = 0;
-                if (config.useCooler) {
-                    cooler = lists.allCoolers.find(c => checkFit('cooler', c, {cpu: plat.cpu, case: bCase}));
-                    if(!cooler) cooler = { name: "None (No Fit)", price: 0, height: 0, size: 0, flow: 0, type: "N/A" };
-                    coolerPrice = cooler.price;
-                }
-
-                let psu = null;
-                let psuPrice = 0;
-                if (config.usePsu) {
-                    psu = lists.allPsu.find(p => {
-                        if (p.watts < totalWatts) return false;
-                        if (bCase && bCase.maxPsuLen > 0 && p.length > bCase.maxPsuLen) return false;
-                        return true;
-                    });
-                    if (!psu) continue;
-                    psuPrice = psu.price;
-                }
-
-                let fan = null;
-                let fanPrice = 0;
-                if (config.useFan && bCase) {
-                    fan = lists.allFans.find(f => checkFit('fan', f, {case: bCase}));
-                    if(fan) fanPrice = fan.price;
-                }
-
-                let realTotal = plat.price + gpuConf.price + casePrice + coolerPrice + psuPrice + fanPrice + lists.totalStorageCost;
-                if (realTotal > config.budget) continue;
-
-                // NO BUFFERING. WRITE TO DB.
-                const storageNameList = JSON.stringify(lists.finalStorageList.map(s => s.name));
-                
-                stmt.run([
-                    final3D,
-                    plat.score,
-                    gpuConf.score,
-                    final3D - config.target,
-                    realTotal,
-                    totalWatts,
-                    plat.cpu.name,
-                    gpuConf.gpu.name,
-                    gpuConf.count,
-                    plat.ram?.name || null,
-                    plat.sticks,
-                    plat.mobo?.name || null,
-                    bCase?.name || null,
-                    cooler?.name || null,
-                    psu?.name || null,
-                    fan?.name || null,
-                    storageNameList
-                ]);
-                
-                buildCount++;
+            
+            if (!isTurbo) {
+                stmt.free();
+                sqlDB.run("COMMIT");
             }
-        }
-        
-        stmt.free();
-        sqlDB.run("COMMIT");
+        } // End CPU Loop
 
-        // Update Progress
-        const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
-        document.getElementById('resCount').innerText = `${percent}% Scanned... (${formatNumber(buildCount)} found)`;
-
-        // Next chunk
-        setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
+        finishScan(config);
     }
 
-    function finishScan(config) {
+    async function finishScan(config) {
+        // Finalize Turbo Mode
+        if (isTurbo) {
+            // Flush remaining buffer
+            if (writeBuffer.length > 0) {
+                 const chunk = (buildCount > 500 ? ",\n" : "") + writeBuffer.join(",\n");
+                 await writableStream.write(chunk);
+                 writeBuffer = [];
+            }
+            await writableStream.write(']'); // Close JSON array
+            await writableStream.close();
+
+            // Ask to load back?
+            const proceed = confirm(`Scan Complete! ${formatNumber(buildCount)} builds saved to disk.\n\nDo you want to load these results into the viewer now?\n(Warning: Large files >200MB may slow down the browser)`);
+            
+            if (proceed) {
+                // Read back logic
+                document.getElementById('scanStatus').innerText = "Loading saved file back into memory...";
+                const file = await fileHandle.getFile();
+                const text = await file.text();
+                const jsonBuilds = JSON.parse(text);
+                
+                // Bulk Insert back to SQL for sorting/UI compatibility
+                sqlDB.run("BEGIN TRANSACTION");
+                const stmt = sqlDB.prepare(`
+                    INSERT INTO builds (
+                        score, liveCpuScore, gpuScore, diff, price, watts,
+                        cpuName, gpuName, gpuCnt, ramName, ramSticks,
+                        moboName, caseName, coolerName, psuName, fanName, storageNames
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+                
+                jsonBuilds.forEach(b => {
+                    stmt.run([
+                        b.score, b.liveCpuScore, b.gpuScore, b.diff, b.price, b.watts,
+                        b.cpuName, b.gpuName, b.gpuCnt, b.ramName, b.ramSticks,
+                        b.moboName, b.caseName, b.coolerName, b.psuName, b.fanName, b.storageNames
+                    ]);
+                });
+                stmt.free();
+                sqlDB.run("COMMIT");
+            } else {
+                // If user said no, reset count to 0 for UI safety or just leave it blank
+                buildCount = 0; 
+                document.getElementById('resCount').innerText = "Saved to Disk (Not Loaded)";
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('generateBtn').innerText = "GENERATE BUILDS";
+                return;
+            }
+        }
+
         const btn = document.getElementById('generateBtn');
         btn.disabled = false;
         btn.innerText = "GENERATE BUILDS";
