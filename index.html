@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCBS2 Ultimate Pro Builder - Live Calculator</title>
+    <title>PCBS2 Ultimate Pro Builder - Live Calculator (Full Scan Fix)</title>
     <style>
         :root {
             --bg-dark: #0f0f1e;
@@ -1222,8 +1222,8 @@
                     <input type="number" id="level" value="30" min="1" oninput="refreshDropdowns()">
                 </div>
                 <div class="input-group">
-                    <label>Max Results Pool (if you decrease it will be faster but show less results)</label>
-                    <input type="text" id="resLimit" value="4,000,000">
+                    <label>Max Results Output</label>
+                    <input type="text" id="resLimit" value="2,000" title="The number of results to display (Scan is always 100%)">
                 </div>
                 <div class="input-group">
                     <label>Results Per Page</label>
@@ -2527,6 +2527,10 @@
     // =========================================================
     // MAIN GENERATOR FUNCTION (ASYNC CHUNKING)
     // =========================================================
+    
+    // Internal buffer size for "Survival of the Fittest"
+    // We keep this many results in memory during scan, then sort/delete the worst ones.
+    const SCAN_BUFFER_SIZE = 5000;
 
     function generateBuilds() {
         if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
@@ -2648,12 +2652,8 @@
     }
 
     function runScanChunk(cpuIndex, config, lists) {
-        const CHUNK_SIZE = 1; // Process 1 CPU per frame to keep UI responsive
-        const btn = document.getElementById('generateBtn');
-        const countText = document.getElementById('resCount');
-        
-        if (cpuIndex >= lists.validCpu.length || builds.length >= config.maxPoolSize) {
-            // FINISH SCAN
+        // --- 1. END OF LIST CHECK ---
+        if (cpuIndex >= lists.validCpu.length) {
             finishScan(cpuIndex, config, lists);
             return;
         }
@@ -2691,8 +2691,7 @@
         }
 
         for (const ram of ramTiers) {
-            if (builds.length >= config.maxPoolSize) break;
-
+            // REMOVED HARD LIMIT BREAK HERE
             const stickCounts = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
 
             for(const sticks of stickCounts) {
@@ -2711,7 +2710,7 @@
                 if (fittingMobos.length === 0) continue;
 
                 for (const mobo of fittingMobos) {
-                    if (builds.length >= config.maxPoolSize) break;
+                    // REMOVED HARD LIMIT BREAK HERE
 
                     let moboLimit = (mobo && mobo.maxMemSpeed > 0) ? mobo.maxMemSpeed : 0;
                     let liveCpuScore;
@@ -2727,11 +2726,10 @@
                     const partialPrice = cpu.price + (ram ? (ram.price * sticks) : 0) + (mobo ? mobo.price : 0);
 
                     for (const gpuCnt of lists.selectedGpuCounts) {
-                        if (builds.length >= config.maxPoolSize) break;
                         if (mobo && gpuCnt > 1 && mobo.pciSlots < 5) continue;
 
                         for (const gpu of lists.validGpus) {
-                            if (builds.length >= config.maxPoolSize) break;
+                            // REMOVED HARD LIMIT BREAK HERE
 
                             // CHEAP CHECKS
                             if (gpuCnt === 2 && !gpu.score2) continue;
@@ -2808,6 +2806,10 @@
 
                             if (realTotal > config.budget) continue;
 
+                            // ----------------------------------------------------------------
+                            // PUSH & CULL LOGIC (THE FIX)
+                            // ----------------------------------------------------------------
+                            
                             builds.push({
                                 score: final3D,
                                 liveCpuScore: liveCpuScore, 
@@ -2819,6 +2821,13 @@
                                 case: bCase, cooler, psu, fan, 
                                 storages: [...lists.finalStorageList] 
                             });
+
+                            // If we have too many results in memory, sort and delete the worst ones
+                            // We do this every 1000 items to avoid constant sorting overhead
+                            if (builds.length > SCAN_BUFFER_SIZE + 1000) {
+                                sortBuildsArray(builds, config.sort);
+                                builds = builds.slice(0, SCAN_BUFFER_SIZE);
+                            }
                         } 
                     } 
                 } 
@@ -2827,9 +2836,10 @@
 
         // --- UPDATE PROGRESS ---
         const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
-        countText.innerText = `${percent}% Scanned... (${formatNumber(builds.length)} found)`;
+        document.getElementById('resCount').innerText = `${percent}% Scanned... (CPU ${cpuIndex+1}/${lists.validCpu.length})`;
 
         // --- SCHEDULE NEXT CHUNK ---
+        // Using setTimeout(0) allows the UI to refresh
         setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
     }
 
@@ -2839,8 +2849,14 @@
         btn.disabled = false;
         btn.innerText = "GENERATE BUILDS";
 
-        // --- SORT RESULTS ---
+        // --- FINAL SORT ---
         sortBuildsArray(builds, config.sort);
+
+        // --- FINAL TRUNCATE TO USER LIMIT ---
+        // The user only needs to see top N results, even if we buffered more internally
+        if (builds.length > config.maxPoolSize) {
+            builds = builds.slice(0, config.maxPoolSize);
+        }
 
         // --- SCORE RANGE ---
         const scoreRangeDisplay = document.getElementById('scoreRangeDisplay');
@@ -2856,29 +2872,16 @@
             scoreRangeDisplay.innerText = "";
         }
 
-        // --- TRUNCATE IF OVERFLOWED (Safety, though loop should stop) ---
-        if (builds.length > config.maxPoolSize) {
-            builds = builds.slice(0, config.maxPoolSize);
-        }
-
         // --- UPDATE COUNT TEXT WITH COMMAS ---
         document.getElementById('resCount').innerText = `${formatNumber(builds.length)} Builds Found`;
         document.getElementById('pagination').style.display = builds.length > 0 ? 'flex' : 'none';
 
-        // --- GENERATE MISSED PARTS REPORT ---
+        // --- GENERATE REPORT ---
         let report = [];
         
-        // 1. CPUs Missed (Pool limit)
-        const missedCpus = lists.validCpu.length - lastCpuIndex;
-        if (missedCpus > 0 && builds.length >= config.maxPoolSize) {
-            report.push(`⚠️ POOL LIMIT REACHED: Missed ${missedCpus.toLocaleString()} CPUs (Processing stopped early).`);
-        } else if (builds.length >= config.maxPoolSize) {
-             report.push(`⚠️ POOL LIMIT REACHED: Processing stopped mid-way through the final CPU.`);
-        }
-
         // 2. Optimization Skips
         if (lists.optimizedSkippedGpus > 0 || lists.optimizedSkippedMobos > 0) {
-            report.push(`ℹ️ OPTIMIZATION HIDDEN: ${lists.optimizedSkippedMobos.toLocaleString()} duplicate Mobos, ${lists.optimizedSkippedGpus.toLocaleString()} duplicate GPUs.`);
+            report.push(`ℹ️ OPTIMIZATION: Processed all CPUs. Hid ${lists.optimizedSkippedMobos.toLocaleString()} duplicate Mobos, ${lists.optimizedSkippedGpus.toLocaleString()} duplicate GPUs.`);
         }
 
         document.getElementById('scanStatus').innerText = report.join("\n");
