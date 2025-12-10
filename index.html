@@ -2000,22 +2000,21 @@
 
         const currentLvl = parseInt(document.getElementById('level').value) || 30;
         
-        // --- CHANGED LOGIC START ---
-        // We only enforce limits on the Dropdowns if the user has explicitly 
-        // ruled out Single GPU builds.
-        const hasSingle = selectedOptions.gpuCount.has(1);
-        const hasMulti = selectedOptions.gpuCount.has(2) || selectedOptions.gpuCount.has(3) || selectedOptions.gpuCount.has(4);
-        const isDefault = selectedOptions.gpuCount.size === 0; // "Any" includes Single
+        // --- LOGIC START ---
+        // Check if "Single GPU" is allowed in the current selection
+        // (Size 0 means "Any", which includes Single)
+        const allowsSingleGpu = selectedOptions.gpuCount.has(1) || selectedOptions.gpuCount.size === 0;
 
         let moboFilterMinPCI = 0;
         let caseFilterMinGPU = 0;
 
-        // Only apply filters if we are STRICTLY doing multi-GPU (No default, No Single selected)
-        if (!isDefault && !hasSingle && hasMulti) {
+        // If Single GPU is NOT allowed (User explicitly selected only 2, 3, or 4)
+        // Then we enforce the minimum limits to clean up the dropdown lists
+        if (!allowsSingleGpu) {
             moboFilterMinPCI = 5;
             caseFilterMinGPU = 3;
         }
-        // --- CHANGED LOGIC END ---
+        // --- LOGIC END ---
 
         const cpus = Array.from(DB.cpu.values()).filter(c => c.level <= currentLvl);
         const gpus = Array.from(DB.gpu.values()).filter(g => g.level <= currentLvl);
@@ -2025,6 +2024,7 @@
         const ssdList = allStorage.filter(s => s.type === 'SSD' || s.type === 'M.2');
         const hddList = allStorage.filter(s => s.type === 'HDD');
         
+        // Apply the filters calculated above
         const mobos = Array.from(DB.mobo.values()).filter(m => m.level <= currentLvl && m.pciSlots >= moboFilterMinPCI);
         const cases = Array.from(DB.cases.values()).filter(c => c.level <= currentLvl && c.gpuSlots >= caseFilterMinGPU);
 
@@ -2626,21 +2626,20 @@
                     }
 
                     // 2. MOTHERBOARD SELECTION (COMPREHENSIVE UPDATE)
+                    // 2. MOTHERBOARD SELECTION (COMPREHENSIVE UPDATE)
                     let fittingMobos = [];
                     if (useMobo) {
                         const type = ram ? ram.type : (cpu.memTypes.includes("DDR5") ? "DDR5" : "DDR4");
                         
-                        // --- CHANGED LOGIC START ---
-                        // Instead of checking maxSelectedGpu, we check if Single GPU (1) is an option.
-                        // If Single GPU is an option, we CANNOT enforce the 5-slot limit yet.
-                        // We set minPci to 0 so small boards are included in the search.
-                        // The loop further down (step 4) will still reject small boards 
-                        // SPECIFICALLY when gpuCnt > 1.
+                        // --- CHANGED LOGIC ---
+                        // Does the user allow Single GPU builds? (Includes "Any")
                         const allowsSingleGpu = selectedGpuCounts.includes(1);
+                        
+                        // If Single GPU is allowed, we accept ALL boards (0 slots min).
+                        // If Single GPU is forbidden, we enforce 5 slots min immediately.
                         const minPci = allowsSingleGpu ? 0 : 5; 
-                        // --- CHANGED LOGIC END ---
-
-                        // Filter ALL matching mobos instead of just finding one
+                        
+                        // Filter ALL matching mobos
                         fittingMobos = allMobos.filter(m =>
                             m.level <= lvl &&
                             m.socket === cpu.socket &&
