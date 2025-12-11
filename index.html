@@ -3646,7 +3646,10 @@ function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-g
         } else if (!build.original[buildKey] && part) {
             // Part was added where there was none
             isChanged = true;
-        } else if (type === 'ram' && build.ramSticks !== build.originalSticks) {
+        } 
+        // --- FIX IS HERE ---
+        // Change 'build.originalSticks' to 'build.original.ramSticks'
+        else if (type === 'ram' && build.ramSticks !== build.original.ramSticks) {
             // Special check for RAM quantity changes
             isChanged = true;
         }
