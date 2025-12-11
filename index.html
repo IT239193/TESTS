@@ -3580,7 +3580,15 @@ if (b.psu) {
         <div class="part-specs">${specs}</div>
     </div>`;
 }
-// ← STOP HERE! Delete everything below this line until the next function
+            <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
+            <div class="part-header">
+                <span class="part-label">${label}</span>
+                <span class="part-price">${formatCurrency(price)}</span>
+            </div>
+            <div class="part-name">${part.name}</div>
+            <div class="part-specs">${specs}</div>
+        </div>`;
+    }
 
     function changePage(d) {
         const total = getTotalBuilds();
@@ -3769,13 +3777,54 @@ if (b.psu) {
         const { type, buildIdx, originalPart } = currentPopupData;
         const build = builds[buildIdx];
 
-        let priceDiff = newPart.price - (originalPart ? originalPart.price : 0);
+        // 1. Calculate Price Difference
+        let priceDiff = 0;
         
+        if (type === 'ram') {
+            // RAM Price = Price per stick * Stick Count
+            const count = build.ramSticks || 1;
+            const oldPriceTotal = originalPart ? (originalPart.price * count) : 0;
+            const newPriceTotal = newPart.price * count;
+            priceDiff = newPriceTotal - oldPriceTotal;
+        } else {
+            // All other parts are quantity of 1 (in this context)
+            priceDiff = newPart.price - (originalPart ? originalPart.price : 0);
+        }
+        
+        // 2. Assign the new part to the build object
         if (type === 'cases') build.case = newPart;
         else if (type === 'cooler') build.cooler = newPart;
         else if (type === 'fan') build.fan = newPart;
+        else if (type === 'mobo') build.mobo = newPart; // <--- ADDED
+        else if (type === 'psu') build.psu = newPart;   // <--- ADDED
+        else if (type === 'ram') {                      // <--- ADDED
+            build.ram = newPart;
 
+            // 3. Recalculate Scores for RAM changes
+            // Since RAM speed changes CPU score, we must update liveCpuScore and Total Score
+            const newCpuScore = calculateCpuScore(
+                build.cpu,
+                newPart, // Pass the new RAM object
+                build.ramSticks,
+                currentMode, // Use global current mode
+                globalUseOC, // Use global OC state
+                globalUseXMP // Use global XMP state
+            );
+
+            build.liveCpuScore = newCpuScore;
+            
+            // Recalculate Total 3DMark Score
+            build.score = calculate3DMark(newCpuScore, build.gpuScore);
+            
+            // Update the "Diff" value (Score - Target)
+            // We grab the current target from the input box to ensure it stays relevant
+            const targetScore = parseInt(document.getElementById('targetScore').value.replace(/,/g, '')) || 20000;
+            build.diff = build.score - targetScore;
+        }
+
+        // 4. Update Build Price
         build.price += priceDiff;
+
         closePopup();
         renderPage(currentPage); 
     }
@@ -3855,3 +3904,4 @@ if (type === 'fan') {
 </body>
 </html>
 
+although u change like ram of a build by the pop up or motherboard your changes arent applied
