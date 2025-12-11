@@ -3161,78 +3161,76 @@ function calculate3DMark(cpuScore, gpuScore) {
 
 
 function runScanChunk(cpuIndex, config, lists) {
+    // CPU listesi bitti mi? Scan'i tamamla
     if (cpuIndex >= lists.validCpu.length) {
         finishScan(config);
         return;
     }
 
-    sqlDB.run('BEGIN TRANSACTION');
-
+    // Transaction'ı SADECE İLK chunk'ta başlat (Transaction hatasını çözer)
+    if (cpuIndex === 0) {
+        try {
+            sqlDB.run('BEGIN TRANSACTION');
+        } catch (e) {
+            console.error('Transaction başlatma hatası:', e);
+        }
+    }
 
     const cpu = lists.validCpu[cpuIndex];
-
+    
     // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
-    const availableRams = Array.from(DB.ram.values()).filter(r => {
-        if (r.level > config.lvl) return false;
-        if (selectedOptions.ramNames.size > 0 && !selectedOptions.ramNames.has(r.name)) return false;
-        if (selectedOptions.ramMfgrs.size > 0 && !selectedOptions.ramMfgrs.has(r.mfgr)) return false;
-        if (selectedOptions.ramFreqs.size > 0 && !selectedOptions.ramFreqs.has(r.freq)) return false;
-        if (selectedOptions.ramSizes.size > 0 && !selectedOptions.ramSizes.has(r.size)) return false;
-        return true;
-    });
-    
+    const availableRams = Array.from(DB.ram.values()).filter(r => 
+        r.level <= config.lvl &&
+        (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
+        (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) &&
+        (selectedOptions.ramFreqs.size === 0 || selectedOptions.ramFreqs.has(r.freq)) &&
+        (selectedOptions.ramSizes.size === 0 || selectedOptions.ramSizes.has(r.size))
+    );
+
     const uniqueXmpFreqs = [...new Set(availableRams.map(r => r.freq))].sort((a, b) => a - b);
-    
-    const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
-    const uniqueDefaultSpeeds = [...new Set(cpuMobos.filter(m => m !== null).map(m => m.defaultMem))].sort((a, b) => a - b);
+    const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : null;
+    const uniqueDefaultSpeeds = [...new Set(cpuMobos?.filter(m => m !== null).map(m => m.defaultMem) || [])].sort((a, b) => a - b);
     if (uniqueDefaultSpeeds.length === 0) uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
 
-const stmt = sqlDB.prepare(`
-    INSERT OR REPLACE INTO builds 
-    (score, liveCpuScore, gpuScore, diff, price, watts, cpuName, gpuName, gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, fanName, storageNames)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+    // SQL INSERT statement hazırla
+    const stmt = sqlDB.prepare(`
+        INSERT OR REPLACE INTO builds (
+            score, liveCpuScore, gpuScore, diff, price, watts, cpuName, gpuName, 
+            gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, 
+            fanName, storageNames
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-
-    // 2. GPU LOOP
+    // 2. GPU LOOP - Önceden hesaplanmış GPU konfigürasyonları
     for (const gpuConf of precalcGpuConfigs) {
-        if ((cpu.price + gpuConf.price) > config.budget) continue;
+        if (cpu.price + gpuConf.price > config.budget) continue;
 
         // 3. STICKS LOOP
-        const possibleSticks = config.reqSticks > 0 ? [config.reqSticks] : [1, 2, 4];
-
+        const possibleSticks = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
         for (const sticks of possibleSticks) {
             
-            // Choose Frequency List
+            // Frekans listesi seç (XMP vs Default)
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
 
-            // =========================================================
-            //  LOGIC SPLIT: PERFORMANCE MODE (v1) VS THOROUGH (r)
-            // =========================================================
-            
+            // PERFORMANCE MODE LOGIC
             if (globalPerfMode) {
-                // --- PERFORMANCE MODE ON (v1.txt Logic) ---
-                // Stops looking for frequencies as soon as one works for this CPU/GPU/Stick combo
-                
+                // PERFORMANCE MODE ON (v1.txt Logic) - İlk çalışan frekansı kullan
                 let foundWorkingSpec = false;
-
                 for (const freq of freqsToTest) {
-                    if (foundWorkingSpec) break; // Optimization: Stop after first match
-
+                    if (foundWorkingSpec) break;
+                    
                     const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
                     const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
-
+                    
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
-
+                    
                     foundWorkingSpec = true;
-
-                    // Find RAM & Mobo for this freq
-                    const validRams = availableRams.filter(r => {
-                        if (r.freq < freq) return false;
-                        if (!cpu.memTypes.includes(r.type)) return false;
-                        if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
-                        return true;
-                    }).sort((a, b) => a.price - b.price);
+                    
+                    // RAM ve Mobo filtrele
+                    const validRams = availableRams
+                        .filter(r => r.freq === freq && cpu.memTypes.includes(r.type) && 
+                                   (config.targetRamVal === 0 || r.size * sticks === config.targetRamVal))
+                        .sort((a, b) => a.price - b.price);
 
                     if (validRams.length === 0) continue;
 
@@ -3243,40 +3241,32 @@ const stmt = sqlDB.prepare(`
                         if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
                         if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
-                        if (config.useXMP) { if (m.maxMemSpeed < freq) return false; } 
-                        else { if (m.defaultMem !== freq) return false; }
+                        if (config.useXMP && m.maxMemSpeed < freq) return false;
+                        else if (m.defaultMem !== freq) return false;
                         return true;
                     });
 
-                    // Optimization: Only use top 1 RAM
-                    const ramCap = 1; 
+                    // RAM Cap (performans için sadece en ucuz 1 RAM)
+                    const ramCap = 1;
                     assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
-
             } else {
-                // --- PERFORMANCE MODE OFF (r.txt Logic) ---
-                // Buffers ALL valid frequencies for this CPU/GPU/Stick combo, then generates builds for ALL of them.
-                
+                // PERFORMANCE MODE OFF (r.txt Logic) - Tüm valid frekansları dene
                 const validFreqCandidates = [];
-
                 for (const freq of freqsToTest) {
                     const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
                     const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
-
-                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
-
-                    validFreqCandidates.push({ freq, totalScore, liveCpuScore });
+                    if (totalScore >= config.minGenScore && totalScore <= config.maxGenScore) {
+                        validFreqCandidates.push({ freq, totalScore, liveCpuScore });
+                    }
                 }
 
                 for (const candidate of validFreqCandidates) {
                     const { freq, totalScore, liveCpuScore } = candidate;
-
-                    const validRams = availableRams.filter(r => {
-                        if (r.freq < freq) return false;
-                        if (!cpu.memTypes.includes(r.type)) return false;
-                        if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
-                        return true;
-                    }).sort((a, b) => a.price - b.price);
+                    const validRams = availableRams
+                        .filter(r => r.freq === freq && cpu.memTypes.includes(r.type) && 
+                                   (config.targetRamVal === 0 || r.size * sticks === config.targetRamVal))
+                        .sort((a, b) => a.price - b.price);
 
                     if (validRams.length === 0) continue;
 
@@ -3287,12 +3277,12 @@ const stmt = sqlDB.prepare(`
                         if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
                         if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
-                        if (config.useXMP) { if (m.maxMemSpeed < freq) return false; } 
-                        else { if (m.defaultMem !== freq) return false; }
+                        if (config.useXMP && m.maxMemSpeed < freq) return false;
+                        else if (m.defaultMem !== freq) return false;
                         return true;
                     });
 
-                    // Even in r.txt logic, we usually only pick the cheapest RAM per frequency to avoid DB explosion
+                    // RAM Cap
                     const ramCap = 1;
                     assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
@@ -3300,14 +3290,25 @@ const stmt = sqlDB.prepare(`
         }
     }
 
+    // Statement'ı temizle
     stmt.free();
-    sqlDB.run('COMMIT');
-    sqlDB.run('END TRANSACTION');
 
+    // COMMIT'i SADECE SON chunk'ta yap (Transaction hatasını çözer)
+    if (cpuIndex === lists.validCpu.length - 1) {
+        try {
+            sqlDB.run('COMMIT');
+            sqlDB.run('END TRANSACTION');
+        } catch (e) {
+            console.error('Transaction kapatma hatası:', e);
+            sqlDB.run('ROLLBACK');
+        }
+    }
 
+    // Progress güncelle
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
     document.getElementById('resCount').innerText = `${percent}% | ${formatNumber(buildCount)} builds`;
-    
+
+    // Sonraki chunk'ı recursive çağır
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
 
