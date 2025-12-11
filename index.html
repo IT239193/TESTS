@@ -1970,10 +1970,9 @@ if (selectedOptions.ramNames.size > 0) {
     else if (sortKey === 'value_asc') orderBy = '(score * 1.0 / price) ASC';
     
 const stmt = sqlDB.prepare(`
-    INSERT OR REPLACE INTO builds 
-    (score, liveCpuScore, gpuScore, diff, price, watts, cpuName, gpuName, gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, fanName, storageNames)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    SELECT * FROM builds ORDER BY ${orderBy} LIMIT ? OFFSET ?
 `);
+
 
     
     stmt.bind({$limit: limit, $offset: offset});
@@ -3185,14 +3184,12 @@ function runScanChunk(cpuIndex, config, lists) {
     const uniqueDefaultSpeeds = [...new Set(cpuMobos.filter(m => m !== null).map(m => m.defaultMem))].sort((a, b) => a - b);
     if (uniqueDefaultSpeeds.length === 0) uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
 
-    sqlDB.run("BEGIN TRANSACTION");
-    const stmt = sqlDB.prepare(`
-        INSERT INTO builds (
-            score, liveCpuScore, gpuScore, diff, price, watts,
-            cpuName, gpuName, gpuCnt, ramName, ramSticks,
-            moboName, caseName, coolerName, psuName, fanName, storageNames
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+const stmt = sqlDB.prepare(`
+    INSERT OR REPLACE INTO builds 
+    (score, liveCpuScore, gpuScore, diff, price, watts, cpuName, gpuName, gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, fanName, storageNames)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
 
     // 2. GPU LOOP
     for (const gpuConf of precalcGpuConfigs) {
