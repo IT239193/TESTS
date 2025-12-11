@@ -3580,15 +3580,7 @@ if (b.psu) {
         <div class="part-specs">${specs}</div>
     </div>`;
 }
-            <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
-            <div class="part-header">
-                <span class="part-label">${label}</span>
-                <span class="part-price">${formatCurrency(price)}</span>
-            </div>
-            <div class="part-name">${part.name}</div>
-            <div class="part-specs">${specs}</div>
-        </div>`;
-    }
+
 
     function changePage(d) {
         const total = getTotalBuilds();
@@ -3710,17 +3702,19 @@ if (b.psu) {
                 const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
                 const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
                 const slotsFull = currentSameType.length >= slotCount;
+                const safeName = p.name.replace(/'/g, "\\'");
 
                 if (isSelected) {
                     const count = currentDrives.filter(d => d.name === p.name).length;
+                    // Note the backticks ` ` surrounding the HTML
                     actionBtn = `
-                        <button class="btn-select-part selected" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', -1)">REMOVE (Has ${count})</button>
-                        ${!slotsFull ? `<button class="btn-select-part" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', 1)">ADD</button>` : ''}
+                        <button class="btn-select-part selected" onclick="toggleStorage('${safeName}', -1)">REMOVE (Has ${count})</button>
+                        ${!slotsFull ? `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>` : ''}
                     `;
                 } else if (slotsFull) {
                     actionBtn = `<button class="btn-select-part" disabled title="No Slots Available">FULL</button>`;
                 } else {
-                    actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${p.name.replace(/'/g, "\\'")}', 1)">ADD</button>`;
+                    actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>`;
                 }
                 diffStr = formatCurrency(p.price);
 
@@ -3903,4 +3897,3 @@ if (type === 'fan') {
 </script>
 </body>
 </html>
-
