@@ -3153,7 +3153,6 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
         runScanChunk(0, config, lists);
     }
 
-
 function runScanChunk(cpuIndex, config, lists) {
     if (cpuIndex >= lists.validCpu.length) {
         finishScan(config);
@@ -3172,8 +3171,6 @@ function runScanChunk(cpuIndex, config, lists) {
         return true;
     });
 
-    // IMPORTANT: Sort Frequencies HIGH to LOW (b - a)
-    // This ensures the "Best Score" version of a specific hardware list is the first one we attempt.
     const uniqueXmpFreqs = [...new Set(availableRams.map(r => r.freq))].sort((a, b) => b - a);
     
     const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
@@ -3198,36 +3195,33 @@ function runScanChunk(cpuIndex, config, lists) {
 
         for (const sticks of possibleSticks) {
             
-            // --- DEDUPLICATION SET ---
-            // Stores the unique "Hardware Signature" for this chunk.
-            // Mirrors your SQL "GROUP BY cpuName, gpuName, ramName..." logic.
-            const uniqueHardwareConfigs = new Set();
+            // DEDUPLICATION SETS
+            // uniqueBuilds: Tracks "Parts + Score" to stop exact duplicates.
+            // uniqueHardware: Tracks "Parts Only" (Used for PerfMode optimization).
+            const uniqueBuilds = new Set();
+            const uniqueHardware = new Set();
 
-            // Choose Frequency List based on XMP setting
             let freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
             
             for (const freq of freqsToTest) {
-                // Performance Mode: If we already found valid builds for this CPU/GPU/Stick combo, we can stop scanning lower freqs entirely to save time.
-                // (This is optional optimization, separate from the deduplication logic).
-                if (globalPerfMode && uniqueHardwareConfigs.size > 0) break;
+                // If PerfMode is ON, and we already found a valid build for this hardware config, stop checking lower freqs.
+                if (globalPerfMode && uniqueHardware.size > 0) break;
 
                 const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
                 const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
 
-                // Score Filtering
                 if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
 
-                // Find RAMs for this freq (Cheapest First)
+                // Find RAMs for this freq
                 const validRams = availableRams.filter(r => {
                     if (r.freq < freq) return false;
                     if (!cpu.memTypes.includes(r.type)) return false;
                     if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
                     return true;
-                }).sort((a, b) => a.price - b.price); 
+                }).sort((a, b) => a.price - b.price);
 
                 if (validRams.length === 0) continue;
 
-                // Find Mobos
                 const validMobos = cpuMobos.filter(m => {
                     if (!m) return true;
                     if (validRams[0].type !== m.ramType) return false;
@@ -3240,8 +3234,8 @@ function runScanChunk(cpuIndex, config, lists) {
                     return true;
                 });
 
-                // Pass the deduplication Set to the assembler
-                assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt, uniqueHardwareConfigs);
+                // Pass the deduplication sets to the assembler
+                assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt, uniqueBuilds, uniqueHardware);
             }
         }
     }
@@ -3254,7 +3248,6 @@ function runScanChunk(cpuIndex, config, lists) {
     
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
-
 
 async function generateBuilds() {
         // Safety Checks
@@ -3442,11 +3435,10 @@ async function generateBuilds() {
         runScanChunk(0, config, lists);
     }
 
-
-function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, config, lists, stmt, uniqueHardwareConfigs) {
+function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, config, lists, stmt, uniqueBuilds, uniqueHardware) {
     let buildInserted = false;
 
-    // Optimization: If OPTIMIZE_BUILD_RESULTS is on, we only look at the 1st (Cheapest) RAM.
+    // Optimization: Limit to the cheapest RAM for this specific frequency/config
     const ramLoop = OPTIMIZE_BUILD_RESULTS ? [rams[0]] : rams;
 
     for (const ram of ramLoop) {
@@ -3461,7 +3453,7 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
             const totalWatts = cpu.watts + gpuConf.watts + config.extraW;
             if (config.limitTotalW && totalWatts > config.limitTotalW) continue;
 
-            // Case Selection (Cheapest Valid)
+            // Case Selection
             let validCase = null;
             if (config.useCase) {
                 validCase = lists.allCases.find(c => {
@@ -3473,8 +3465,9 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
                 if (!validCase) continue; 
             }
 
-            // Cooler Selection (Cheapest Valid)
+            // Cooler / PSU / Fan
             let currentPrice = corePrice + (validCase ? validCase.price : 0);
+            
             let cooler = null;
             if (config.useCooler) {
                 cooler = lists.allCoolers.find(c => {
@@ -3486,7 +3479,6 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
                 else continue; 
             }
 
-            // PSU Selection (Cheapest Valid)
             let psu = null;
             if (config.usePsu) {
                 const validPsus = lists.allPsu.filter(p => 
@@ -3506,7 +3498,6 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
                 }
             }
 
-            // Fan Selection (Cheapest Valid)
             let fan = null;
             if (config.useFan && validCase) {
                 fan = lists.allFans.find(f => true);
@@ -3517,18 +3508,25 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
             if (currentPrice > config.budget) continue;
 
             // --- IN-GENERATION DEDUPLICATION LOGIC ---
-            // This key represents the EXACT Hardware Configuration.
-            // It matches the columns in your SQL GROUP BY.
-            const configKey = `${ram.name}|${sticks}|${mobo ? mobo.name : 'N/A'}|${validCase ? validCase.name : 'N/A'}|${psu ? psu.name : 'N/A'}|${cooler ? cooler.name : 'N/A'}|${fan ? fan.name : 'N/A'}`;
+            // 1. Create a Key for the Hardware Config (matches your SQL GROUP BY fields)
+            const partsKey = `${ram.name}|${sticks}|${mobo ? mobo.name : 'N/A'}|${validCase ? validCase.name : 'N/A'}|${psu ? psu.name : 'N/A'}`;
             
-            // If we have already generated a build with this EXACT hardware...
-            if (uniqueHardwareConfigs.has(configKey)) {
-                // ...Skip it. 
-                // Since we iterate Frequencies High -> Low, the existing one in the Set
-                // is guaranteed to have a higher (or equal) score than this one.
-                continue;
+            // 2. PerfMode Check: If ON, we only want 1 build per hardware config (best score).
+            // Since we sort freqs High->Low, the first one we find is the best.
+            if (globalPerfMode && uniqueHardware.has(partsKey)) {
+                continue; 
             }
-            // ------------------------------------------
+
+            // 3. Exact Duplicate Check:
+            // Key = Hardware + SCORE. 
+            // If this exact hardware + exact score exists, skip it.
+            // If this exact hardware + DIFFERENT score exists, allow it.
+            const fullKey = `${partsKey}|${score}`;
+            
+            if (uniqueBuilds.has(fullKey)) {
+                continue; 
+            }
+            // ---------------------------
 
             const storageNameList = JSON.stringify(lists.finalStorageList.map(s => s.name));
 
@@ -3541,23 +3539,21 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
                 storageNameList
             ]);
             
-            // Add this configuration to the Set so we don't generate it again at a lower frequency
-            uniqueHardwareConfigs.add(configKey);
+            uniqueBuilds.add(fullKey);
+            uniqueHardware.add(partsKey);
             
             buildCount++;
             buildInserted = true;
             
-            // Strict Optimization: If enabled, we found the cheapest mobo for this specific RAM stick.
-            // We don't need to check more expensive mobos for the *same* RAM stick.
             if (OPTIMIZE_BUILD_RESULTS) break; 
         }
         
-        // Strict Optimization: If enabled, we found the cheapest RAM for this specific Frequency.
         if (OPTIMIZE_BUILD_RESULTS && buildInserted) break;
     }
 
     return buildInserted;
 }
+
 
 function deduplicateBuilds() {
     if (!sqlDB) return;
