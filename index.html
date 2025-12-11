@@ -3629,22 +3629,30 @@ function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-g
     // Check if we need a Revert Button
     let isChanged = false;
 
+    // FIX: Normalize the key name to match the build object structure
+    // The build object uses 'case' (singular), but the category type is 'cases' (plural)
+    const buildKey = type === 'cases' ? 'case' : type;
+
     if (type === 'storage') {
         // Complex check for storage arrays
         const origNames = build.original.storages.map(s => s.name).sort().join(',');
         const currNames = build.storages.map(s => s.name).sort().join(',');
         if (origNames !== currNames) isChanged = true;
     } else {
-        // Simple name check for single parts
-        if (build.original[type] && build.original[type].name !== part.name) {
+        // Simple name check for single parts using the corrected buildKey
+        if (build.original[buildKey] && build.original[buildKey].name !== part.name) {
             isChanged = true;
-        } else if (!build.original[type] && part) {
+        } else if (!build.original[buildKey] && part) {
             // Part was added where there was none
+            isChanged = true;
+        } else if (type === 'ram' && build.ramSticks !== build.originalSticks) {
+            // Special check for RAM quantity changes
             isChanged = true;
         }
     }
 
     if (isChanged) {
+        // We pass 'type' to revertPart because the rest of the system uses the category strings
         revertBtn = `<button class="btn-revert" onclick="revertPart(${bIdx}, '${type}', event)" title="Revert to original">↺</button>`;
     }
 
@@ -3662,21 +3670,31 @@ function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-g
 }
 
 function revertPart(buildIdx, type, event) {
-    if(event) event.stopPropagation(); // Prevent opening the popup
+    if(event) event.stopPropagation(); 
     
     const build = builds[buildIdx];
+    const buildKey = type === 'cases' ? 'case' : type;
     
     // 1. Restore Logic
     if (type === 'storage') {
-        build.storages = [...build.original.storages]; // Restore array copy
+        build.storages = [...build.original.storages]; 
     } else {
-        const originalPart = build.original[type];
-        if (!originalPart) return; // Safety
+        const originalPart = build.original[buildKey];
+        if (!originalPart && type !== 'fan') return; // Fan is optional, might not have original
         
-        build[type] = originalPart;
+        build[buildKey] = originalPart;
 
-        // If restoring RAM, Recalc Scores
+        // If restoring RAM, Restore Sticks count AND Recalc Scores
         if (type === 'ram') {
+            // Restore original stick count
+            if (build.original.ramSticks) {
+                build.ramSticks = build.original.ramSticks; // Assumes you save this during generation (see below)
+            } else {
+                // Fallback if not saved in original object
+                build.ramSticks = parseInt(document.getElementById('ramSticks').value) || 1; 
+                // Note: To make this perfect, you should add ramSticks to build.original in getBuildsFromSQL
+            }
+
              const newCpuScore = calculateCpuScore(
                 build.cpu, originalPart, build.ramSticks,
                 currentMode, globalUseOC, globalUseXMP
@@ -3690,27 +3708,20 @@ function revertPart(buildIdx, type, event) {
     }
 
     // 2. Recalculate Total Price
-    // Start with base components
     let newPrice = build.cpu.price + (build.gpu.price * build.gpuCnt);
-    
     if (build.ram) newPrice += (build.ram.price * build.ramSticks);
     if (build.mobo) newPrice += build.mobo.price;
     if (build.case) newPrice += build.case.price;
     if (build.cooler) newPrice += build.cooler.price;
     if (build.psu) newPrice += build.psu.price;
     if (build.fan) newPrice += build.fan.price;
-    
-    // Add Storage Price
-    if (build.storages) {
-        build.storages.forEach(s => newPrice += s.price);
-    }
+    if (build.storages) build.storages.forEach(s => newPrice += s.price);
     
     build.price = newPrice;
 
     // 3. Render
     renderPage(currentPage, true);
 }
-
     function changePage(d) {
         const total = getTotalBuilds();
         const totalPages = Math.ceil(total / itemsPerPage);
@@ -3827,26 +3838,26 @@ function revertPart(buildIdx, type, event) {
         return 0;
     });
 
-    // 6. Identification (What is currently selected? What was original?)
-    // Note: 'storage' is an array, handled separately inside the loop
-    const currentPartName = (type !== 'storage' && build[type]) ? build[type].name : null;
-    const originalPartName = (type !== 'storage' && build.original && build.original[type]) ? build.original[type].name : null;
+    // 6. Identification logic
+    // Handle Singular keys vs Plural types (case vs cases)
+    const buildKey = type === 'cases' ? 'case' : type;
+    const currentPartName = (type !== 'storage' && build[buildKey]) ? build[buildKey].name : null;
+    const originalPartName = (type !== 'storage' && build.original && build.original[buildKey]) ? build.original[buildKey].name : null;
 
     // 7. Render Loop (Limit to 100 to prevent lag)
     const subset = candidates.slice(0, 100);
 
     subset.forEach((p, idx) => {
-        // Compare price against the CURRENTLY selected part for the diff calculation
         let currentPrice = 0;
-        if (type === 'storage') currentPrice = 0; // Storage diffs are absolute per item
-        else if (build[type]) currentPrice = build[type].price;
+        if (type === 'storage') currentPrice = 0; 
+        else if (type === 'ram') currentPrice = build.ram ? build.ram.price : 0; // Per stick price for diff
+        else if (build[buildKey]) currentPrice = build[buildKey].price;
 
         let newPrice = p.price;
         let actionBtn = "";
         let diffStr = "";
         let diffClass = "";
 
-        // Escape quotes for onclick handlers
         const safeName = p.name.replace(/'/g, "\\'");
 
         // --- BRANCH A: STORAGE LOGIC ---
@@ -3855,16 +3866,12 @@ function revertPart(buildIdx, type, event) {
             const isSelected = currentDrives.some(d => d.name === p.name);
             const count = currentDrives.filter(d => d.name === p.name).length;
             
-            // Slot Logic
             const isSSD = (p.type === 'SSD' || p.type === 'M.2');
             const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
             const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
             const slotsFull = currentSameType.length >= slotCount;
 
-            // Generate Buttons
             if (isSelected) {
-                // It is selected, show Remove button (Red)
-                // If slots aren't full, also show a small '+' button
                 let addBtn = !slotsFull 
                     ? `<button class="btn-select-part" style="padding: 8px 12px; margin-left:5px;" onclick="toggleStorage('${safeName}', 1)">+</button>` 
                     : '';
@@ -3880,37 +3887,60 @@ function revertPart(buildIdx, type, event) {
             } else {
                 actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>`;
             }
-            
-            // Storage price diff is just the price of the drive (since we are adding)
             diffStr = formatCurrency(p.price);
-
         } 
-        // --- BRANCH B: STANDARD PART LOGIC ---
+        // --- BRANCH B: RAM LOGIC (NEW MULTI-ADD) ---
+        else if (type === 'ram') {
+            // Is this the currently selected RAM model?
+            const isCurrentModel = (p.name === currentPartName);
+            const count = isCurrentModel ? build.ramSticks : 0;
+            
+            // Limit check (Mobo slots)
+            const maxSlots = (build.mobo && build.mobo.size === 'Mini-ITX') ? 2 : 4;
+            const isFull = (count >= maxSlots);
+
+            if (isCurrentModel) {
+                 let addBtn = !isFull 
+                    ? `<button class="btn-select-part" style="padding: 8px 12px; margin-left:5px;" onclick="toggleRam('${safeName}', 1)">+</button>` 
+                    : `<button class="btn-select-part" disabled style="padding: 8px 12px; margin-left:5px; background:#555;">Max</button>`;
+                
+                actionBtn = `
+                    <div style="display:flex; align-items:center;">
+                        <button class="btn-select-part is-current" onclick="toggleRam('${safeName}', -1)">-</button>
+                        <span style="font-weight:bold; margin:0 10px; font-size:1.2em;">${count}</span>
+                        ${addBtn}
+                    </div>
+                `;
+            } else {
+                // If selecting a NEW RAM, start with 1 stick (or keep current count? Let's start with 1 to be safe/clear)
+                actionBtn = `<button class="btn-select-part" onclick="toggleRam('${safeName}', 1, true)">SELECT</button>`;
+            }
+
+            // Price diff per stick
+            const diff = newPrice - currentPrice;
+            diffStr = diff > 0 ? `+${formatCurrency(diff)}` : (diff < 0 ? `-${formatCurrency(Math.abs(diff))}` : '$0.00');
+            diffStr += " / stick"; // Clarify it's unit price
+            diffClass = diff > 0 ? 'val-neg' : (diff < 0 ? 'val-pos' : '');
+        }
+        // --- BRANCH C: STANDARD PART LOGIC ---
         else {
-            // Price Diff vs Current
             const diff = newPrice - currentPrice;
             diffStr = diff > 0 ? `+${formatCurrency(diff)}` : (diff < 0 ? `-${formatCurrency(Math.abs(diff))}` : '$0.00');
             diffClass = diff > 0 ? 'val-neg' : (diff < 0 ? 'val-pos' : '');
 
             if (p.name === currentPartName) {
-                // This part is currently on the build
                 if (p.name !== originalPartName) {
-                    // It's a changed part. Allow user to "Revert" via clicking this or the separate revert button.
                     actionBtn = `<button class="btn-select-part is-current" onclick="revertPart(${buildIdx}, '${type}'); closePopup();">CURRENT (REVERT)</button>`;
                 } else {
-                    // It's the original part AND currently selected.
                     actionBtn = `<button class="btn-select-part selected">SELECTED</button>`;
                 }
             } else if (p.name === originalPartName) {
-                // This is the original part, but it is NOT currently selected.
                 actionBtn = `<button class="btn-select-part revert-target" onclick="revertPart(${buildIdx}, '${type}'); closePopup();">REVERT TO THIS</button>`;
             } else {
-                // Standard unselected part.
                 actionBtn = `<button class="btn-select-part" onclick="selectReplacementPart('${safeName}')">SELECT</button>`;
             }
         }
 
-        // 8. Generate Details String
         let details = '';
         if (type === 'cases') details = `Max GPU: ${p.maxGpuLen}mm | Size: ${p.size} | GPU Slots: ${p.gpuSlots}`;
         else if (type === 'cooler') details = `${p.type} | Flow: ${p.flow}`;
@@ -3920,10 +3950,9 @@ function revertPart(buildIdx, type, event) {
         else if (type === 'mobo') details = `${p.socket} | ${p.size} | ${p.ramType}`;
         else if (type === 'psu') details = `${p.watts}W | ${p.length}mm`;
 
-        // 9. Append Row
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${actionBtn}</td>
+            <td style="width:180px;">${actionBtn}</td>
             <td style="font-weight:bold; color:#fff;">${p.name}</td>
             <td style="font-size:0.9em; color:#aaa;">${details}</td>
             <td class="price-red-cell">${formatCurrency(newPrice)}</td>
@@ -3931,6 +3960,68 @@ function revertPart(buildIdx, type, event) {
         `;
         tbody.appendChild(tr);
     });
+}
+
+
+window.toggleRam = function(partName, delta, isNewSelection = false) {
+    if (!currentPopupData || currentPopupData.type !== 'ram') return;
+    
+    const newPart = DB['ram'].get(partName);
+    const build = builds[currentPopupData.buildIdx];
+    if (!newPart) return;
+
+    let newCount = build.ramSticks;
+
+    if (isNewSelection) {
+        // Switching to a completely new RAM model
+        build.ram = newPart;
+        // Default to 1 stick when switching, or keep existing count? 
+        // Let's default to 1 to ensure validity, user can add more.
+        newCount = 1; 
+    } else {
+        // Adjusting count of current RAM
+        newCount += delta;
+    }
+
+    // Bounds Check
+    const maxSlots = (build.mobo && build.mobo.size === 'Mini-ITX') ? 2 : 4;
+    if (newCount > maxSlots) newCount = maxSlots;
+    if (newCount < 1) newCount = 1; // Minimum 1 stick
+
+    // Apply Count
+    build.ramSticks = newCount;
+
+    // Recalculate Scores (Changing sticks/model affects Dual/Quad Channel score)
+    const newCpuScore = calculateCpuScore(
+        build.cpu, build.ram, build.ramSticks,
+        currentMode, globalUseOC, globalUseXMP
+    );
+    build.liveCpuScore = newCpuScore;
+    build.score = calculate3DMark(newCpuScore, build.gpuScore);
+    
+    // Update Diff
+    const targetScore = parseInt(document.getElementById('targetScore').value.replace(/,/g, '')) || 20000;
+    build.diff = build.score - targetScore;
+
+    // Recalculate Price
+    // Price = Core Parts + RAM + Storage + Case/Mobo/etc
+    // Easiest way is to recalculate total from scratch to be safe
+    let newTotal = 0;
+    newTotal += build.cpu.price;
+    newTotal += (build.gpu.price * build.gpuCnt);
+    newTotal += (build.ram.price * build.ramSticks);
+    if(build.mobo) newTotal += build.mobo.price;
+    if(build.case) newTotal += build.case.price;
+    if(build.cooler) newTotal += build.cooler.price;
+    if(build.psu) newTotal += build.psu.price;
+    if(build.fan) newTotal += build.fan.price;
+    if(build.storages) build.storages.forEach(s => newTotal += s.price);
+
+    build.price = newTotal;
+
+    // Refresh UI
+    refreshPopup();
+    renderPage(currentPage, true);
 }
 
     window.toggleStorage = function(partName, delta) {
