@@ -3161,13 +3161,12 @@ function calculate3DMark(cpuScore, gpuScore) {
 
 
 function runScanChunk(cpuIndex, config, lists) {
-    // CPU listesi bitti mi? Scan'i tamamla
     if (cpuIndex >= lists.validCpu.length) {
         finishScan(config);
         return;
     }
 
-    // Transaction'ı SADECE İLK chunk'ta başlat (Transaction hatasını çözer)
+    // Transaction'ı SADECE İLK chunk'ta başlat
     if (cpuIndex === 0) {
         try {
             sqlDB.run('BEGIN TRANSACTION');
@@ -3177,8 +3176,8 @@ function runScanChunk(cpuIndex, config, lists) {
     }
 
     const cpu = lists.validCpu[cpuIndex];
-    
-    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
+
+    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES (TÜM RAM FREKANSLARI)
     const availableRams = Array.from(DB.ram.values()).filter(r => 
         r.level <= config.lvl &&
         (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
@@ -3201,7 +3200,7 @@ function runScanChunk(cpuIndex, config, lists) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    // 2. GPU LOOP - Önceden hesaplanmış GPU konfigürasyonları
+    // 2. GPU LOOP
     for (const gpuConf of precalcGpuConfigs) {
         if (cpu.price + gpuConf.price > config.budget) continue;
 
@@ -3209,12 +3208,10 @@ function runScanChunk(cpuIndex, config, lists) {
         const possibleSticks = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
         for (const sticks of possibleSticks) {
             
-            // Frekans listesi seç (XMP vs Default)
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
 
-            // PERFORMANCE MODE LOGIC
             if (globalPerfMode) {
-                // PERFORMANCE MODE ON (v1.txt Logic) - İlk çalışan frekansı kullan
+                // PERFORMANCE MODE ON - İlk çalışan frekansı kullan
                 let foundWorkingSpec = false;
                 for (const freq of freqsToTest) {
                     if (foundWorkingSpec) break;
@@ -3226,7 +3223,6 @@ function runScanChunk(cpuIndex, config, lists) {
                     
                     foundWorkingSpec = true;
                     
-                    // RAM ve Mobo filtrele
                     const validRams = availableRams
                         .filter(r => r.freq === freq && cpu.memTypes.includes(r.type) && 
                                    (config.targetRamVal === 0 || r.size * sticks === config.targetRamVal))
@@ -3234,7 +3230,7 @@ function runScanChunk(cpuIndex, config, lists) {
 
                     if (validRams.length === 0) continue;
 
-                    const validMobos = cpuMobos.filter(m => {
+                    const validMobos = cpuMobos?.filter(m => {
                         if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
                         if (gpuConf.count > 1 && m.pciSlots < 5) return false;
@@ -3244,14 +3240,13 @@ function runScanChunk(cpuIndex, config, lists) {
                         if (config.useXMP && m.maxMemSpeed < freq) return false;
                         else if (m.defaultMem !== freq) return false;
                         return true;
-                    });
+                    }) || [];
 
-                    // RAM Cap (performans için sadece en ucuz 1 RAM)
-                    const ramCap = 1;
-                    assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
+                    // TÜM VALID RAM'leri kullan (SINIRSIZ)
+                    assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
             } else {
-                // PERFORMANCE MODE OFF (r.txt Logic) - Tüm valid frekansları dene
+                // PERFORMANCE MODE OFF - TÜM valid frekansları dene
                 const validFreqCandidates = [];
                 for (const freq of freqsToTest) {
                     const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
@@ -3270,7 +3265,7 @@ function runScanChunk(cpuIndex, config, lists) {
 
                     if (validRams.length === 0) continue;
 
-                    const validMobos = cpuMobos.filter(m => {
+                    const validMobos = cpuMobos?.filter(m => {
                         if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
                         if (gpuConf.count > 1 && m.pciSlots < 5) return false;
@@ -3280,20 +3275,18 @@ function runScanChunk(cpuIndex, config, lists) {
                         if (config.useXMP && m.maxMemSpeed < freq) return false;
                         else if (m.defaultMem !== freq) return false;
                         return true;
-                    });
+                    }) || [];
 
-                    // RAM Cap
-                    const ramCap = 1;
-                    assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
+                    // TÜM VALID RAM'leri kullan (SINIRSIZ)
+                    assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
             }
         }
     }
 
-    // Statement'ı temizle
     stmt.free();
 
-    // COMMIT'i SADECE SON chunk'ta yap (Transaction hatasını çözer)
+    // COMMIT'i SADECE SON chunk'ta yap
     if (cpuIndex === lists.validCpu.length - 1) {
         try {
             sqlDB.run('COMMIT');
@@ -3304,11 +3297,9 @@ function runScanChunk(cpuIndex, config, lists) {
         }
     }
 
-    // Progress güncelle
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
     document.getElementById('resCount').innerText = `${percent}% | ${formatNumber(buildCount)} builds`;
 
-    // Sonraki chunk'ı recursive çağır
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
 
