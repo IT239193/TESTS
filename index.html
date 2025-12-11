@@ -1222,8 +1222,8 @@
 
     <!-- REMOVED resLimit input, Moved Results Per Page here -->
     <div class="input-group">
-        <label>Results Per Page</label>
-        <input type="number" id="resultsPerPage" value="100" min="1" max="1000">
+        <label>Results Pool</label>
+        <input type="number" id="resultsPerPage" value="100" min="1" max="1000000000">
     </div>
 </div>
 
@@ -3101,31 +3101,35 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
 
     // PHASE 2: SELECTION & ASSEMBLY (The "e.txt" Robust Method)
     // Selects a mix of builds and finds 100% compatible parts for them.
+    // PHASE 2: SELECTION & ASSEMBLY (Corrected e.txt Logic)
     function processValidCores(config, lists) {
         document.getElementById('scanStatus').innerText = "Phase 2: Assembling...";
         
-        // 1. LIMIT & SELECT (Cheapest, Expensive, Random)
-        const limit = config.maxResults;
-        const segment = Math.floor(limit / 3);
+        // 1. LIMIT & SELECT (1 Cheap, 1 Expensive, Rest Random)
+        const targetCount = config.maxResults;
         let finalSelection = [];
 
-        // A. Cheapest
+        // A. Get Absolute Cheapest (Top 1)
         validCores.sort((a,b) => a.estPrice - b.estPrice);
-        finalSelection.push(...validCores.slice(0, segment));
+        if (validCores.length > 0) finalSelection.push(validCores[0]);
         
-        // B. Expensive
+        // B. Get Absolute Most Expensive (Top 1)
+        // We re-sort descending
         validCores.sort((a,b) => b.estPrice - a.estPrice);
-        finalSelection.push(...validCores.slice(0, segment));
+        if (validCores.length > 0) finalSelection.push(validCores[0]);
 
-        // C. Random (Shuffle the rest)
-        const remainder = validCores.slice(segment, validCores.length - segment);
-        remainder.sort(() => 0.5 - Math.random());
-        finalSelection.push(...remainder.slice(0, limit - (segment * 2)));
+        // C. Get Randoms (Target - 2)
+        // We shuffle the whole list and take what we need
+        // Optimization: We take slightly more than needed to account for duplicates being removed later
+        const remainderCount = Math.max(0, targetCount - 2);
+        const shuffled = validCores.sort(() => 0.5 - Math.random());
+        finalSelection.push(...shuffled.slice(0, remainderCount + 20)); // Buffer of +20
 
-        // Remove duplicates
+        // D. Remove Duplicates (Dedup by unique signature)
+        // Set() works on object references, but let's be safe
         finalSelection = [...new Set(finalSelection)];
 
-        // 2. ASSEMBLE (Deep Compatibility Check)
+        // 2. ASSEMBLE
         sqlDB.run("BEGIN TRANSACTION");
         const stmt = sqlDB.prepare(`
             INSERT INTO builds (
@@ -3135,15 +3139,18 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
+        let insertedCount = 0;
+
         for (const core of finalSelection) {
+            if (insertedCount >= targetCount) break; // Stop if we hit the limit
+
             const cpu = core.cpu;
             const gpuConf = core.gpuConf;
             const ram = core.ram;
             const sticks = core.sticks;
             const freq = core.freq;
 
-            // A. FIND MOBO (Cheapest compatible)
-            // lists.validMobos is already sorted by Price ASC
+            // A. FIND MOBO
             const validMobo = lists.validMobos.find(m => {
                 if (m.socket !== cpu.socket) return false;
                 if (ram.type !== m.ramType) return false;
@@ -3158,8 +3165,7 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
 
             if (config.useMobo && !validMobo) continue; 
 
-            // B. FIND CASE (Cheapest compatible)
-            // lists.allCases is already sorted by Price ASC
+            // B. FIND CASE
             let validCase = null;
             if (config.useCase) {
                 validCase = lists.allCases.find(c => {
@@ -3171,7 +3177,7 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
                 if (!validCase) continue;
             }
 
-            // C. FIND COOLER (Cheapest compatible with Socket & Case)
+            // C. FIND COOLER
             let validCooler = null;
             if (config.useCooler) {
                 validCooler = lists.allCoolers.find(c => {
@@ -3185,7 +3191,7 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
                 if (!validCooler) continue;
             }
 
-            // D. FIND PSU (Cheapest compatible with Watts & Case)
+            // D. FIND PSU
             const totalWatts = cpu.watts + gpuConf.watts + config.extraW;
             let validPsu = null;
             if (config.usePsu) {
@@ -3222,6 +3228,7 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
                     storageNameList
                 ]);
                 buildCount++;
+                insertedCount++;
             }
         }
 
