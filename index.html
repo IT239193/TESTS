@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -3514,6 +3514,191 @@ function finishScan(config) {
             }
         }, 300);
     }
+}
+
+    function renderPage(page, forceRefresh = false) {
+    currentPage = page;
+    const sort = document.getElementById('mainSort').value;
+    const total = getTotalBuilds();
+
+    if (total === 0) {
+        document.getElementById('resultsList').innerHTML = '<div style="text-align:center;padding:40px;color:#e74c3c;font-size:1.4em;">No Builds Found</div>';
+        return;
+    }
+
+    const start = (page - 1) * itemsPerPage;
+    
+    // FIX: Only fetch from SQL if we aren't forcing a local refresh
+    if (!forceRefresh) {
+        builds = getBuildsFromSQL(sort, itemsPerPage, start);
+    }
+    
+    const totalPages = Math.ceil(total / itemsPerPage);
+    const useOC = globalUseOC;
+
+    const list = document.getElementById('resultsList');
+    list.innerHTML = '';
+
+    builds.forEach((b, i) => {
+        const diffClass = b.diff > 0 ? 'diff-pos' : 'diff-neg';
+        const sign = b.diff > 0 ? '+' : '';
+        const gpuClass = getBrandClass(b.gpu);
+        const cpuClass = getBrandClass(b.cpu);
+        const buildIdx = i; // Index relative to current page
+
+        const gpuCountStr = b.gpuCnt > 1 ? `${b.gpuCnt}x ` : '';
+        const gpuEmoji = b.gpu.isWater ? '💧' : '💨';
+        
+        const gpuSpecs = `
+            Score: ${formatNumber(b.gpuScore)} | ${b.gpu.vram}GB | ${b.gpu.length}mm | ${b.gpu.watts * b.gpuCnt}W | ${gpuEmoji} | 
+            Base Core/Max Core: ${b.gpu.baseCore || '?'}/${b.gpu.maxCore || '?'} MHz | 
+            Base Mem/Max Mem: ${b.gpu.baseMem || '?'}/${b.gpu.maxMem || '?'} MHz
+        `;
+        
+        const displayCpuScore = b.liveCpuScore;
+        let cpuSpecs = "";
+
+        if (currentMode === 'TSX') {
+            cpuSpecs = `
+                Base Score (TSX): ${formatNumber(displayCpuScore)} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
+                ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
+                ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
+            `;
+        } else if (useOC) {
+            cpuSpecs = `
+                OC Score: ${formatNumber(displayCpuScore)} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
+                ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
+                ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
+            `;
+        } else {
+            cpuSpecs = `
+                Base Score: ${formatNumber(displayCpuScore)} | ${b.cpu.socket} | ${b.cpu.cores} Cores | 
+                ${b.cpu.baseFreq || '?'} / ${b.cpu.maxFreq || '?'} MHz | 
+                ${b.cpu.voltage || '?'}/${b.cpu.maxVoltage || '?'} V
+            `;
+        }
+
+        let ramHTML = '';
+        if (b.ram) {
+            ramHTML = renderInteractive('RAM', 
+                b.ram, 
+                buildIdx, 
+                'ram', 
+                `${b.ramSticks}x | ${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB`,
+                'brand-ram'
+            );
+        }
+
+        let auxHTML = '';
+        if (b.mobo) {
+            auxHTML += renderInteractive('Motherboard',
+                b.mobo,
+                buildIdx,
+                'mobo',
+                `${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}`,
+                'brand-aux'
+            );
+        }
+
+        if (b.psu) {
+            auxHTML += renderInteractive('PSU',
+                b.psu,
+                buildIdx,
+                'psu',
+                `${b.psu.watts}W | Length: ${b.psu.length}mm`,
+                'brand-aux'
+            );
+        }
+
+        let interactiveHTML = '';
+        
+        if (b.storages && b.storages.length > 0) {
+            let totalStoragePrice = b.storages.reduce((acc, s) => acc + s.price, 0);
+            const storageCounts = {};
+            b.storages.forEach(s => {
+                if (!storageCounts[s.name]) storageCounts[s.name] = { count: 0, part: s };
+                storageCounts[s.name].count++;
+            });
+
+            let summaryParts = [];
+            Object.values(storageCounts).forEach(item => {
+                const s = item.part;
+                const c = item.count;
+                summaryParts.push(`${c}x ${s.sizeStr} ${s.type}`);
+            });
+
+            interactiveHTML += renderInteractive('Storage', 
+                { name: "Manage Storage", price: totalStoragePrice }, 
+                buildIdx, 'storage', summaryParts.join(" | ")
+            );
+        } else if (document.getElementById('incStorage').checked) {
+                interactiveHTML += renderInteractive('Storage', {name: "Add Storage", price: 0}, buildIdx, 'storage', "No drives selected");
+        }
+
+        if (b.case) {
+            interactiveHTML += renderInteractive('Case', b.case, buildIdx, 'cases',
+                `Max GPU: ${b.case.maxGpuLen}mm | CPU H: ${b.case.maxCpuHeight}mm | Size: ${b.case.size} | GPU Slots: ${b.case.gpuSlots} | SSD: ${b.case.ssdSlots} | HDD: ${b.case.hddSlots}`
+            );
+        }
+        if (b.cooler) {
+            interactiveHTML += renderInteractive('Cooler', b.cooler, buildIdx, 'cooler',
+                `${b.cooler.type} | ${b.cooler.type.includes('Air') ? `Height: ${b.cooler.height}mm` : `Size: ${b.cooler.size}mm`} | Flow: ${b.cooler.flow} CFM`
+            );
+        }
+        if (b.fan) {
+            interactiveHTML += renderInteractive('Case Fans (x1)', b.fan, buildIdx, 'fan',
+                `Size: ${b.fan.size}mm | Airflow: ${b.fan.flow} CFM`
+            );
+        }
+
+        const html = `
+        <div class="build-card" style="animation-delay:${forceRefresh ? '0s' : i*0.02 + 's'}">
+            <div class="card-header">
+                <div class="score-container">
+                    <span class="build-number">#${start + i + 1}</span>
+                    <div class="score-box">${formatNumber(b.score)}</div>
+                    <div class="diff-box ${diffClass}">${sign}${Math.abs(Math.round(b.diff))}</div>
+                </div>
+                <div class="header-stats">
+                    <div class="stats-row">
+                        <div class="watts-box">⚡ ${b.watts}W</div>
+                        <div class="price-box">${formatCurrency(b.price)}</div>
+                    </div>
+                    <div class="level-box">GPU L${b.gpu.level} | CPU L${b.cpu.level}</div>
+                </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="part-row ${gpuClass} text-colored">
+                    <div class="part-header">
+                        <span class="part-label" style="font-size: 1.5em; font-weight: 900;">${gpuCountStr}GPU</span>
+                        <span class="part-price">${formatCurrency(b.gpu.price * b.gpuCnt)}</span>
+                    </div>
+                    <div class="part-name">${b.gpu.name}</div>
+                    <div class="part-specs">${gpuSpecs}</div>
+                </div>
+                <div class="part-row ${cpuClass} text-colored">
+                    <div class="part-header">
+                        <span class="part-label">CPU</span>
+                        <span class="part-price">${formatCurrency(b.cpu.price)}</span>
+                    </div>
+                    <div class="part-name">${b.cpu.name}</div>
+                    <div class="part-specs">${cpuSpecs}</div>
+                </div>
+                ${ramHTML}
+                ${auxHTML}
+                ${interactiveHTML}
+            </div>
+        </div>`;
+        list.innerHTML += html;
+    });
+
+    const pageInfo = document.getElementById('pageInfo');
+    if (!pageInfo.querySelector('input')) {
+        pageInfo.innerText = `Page ${page} of ${totalPages}`;
+    }
+    document.getElementById('btnPrev').disabled = (page === 1);
+    document.getElementById('btnNext').disabled = (page === totalPages || totalPages === 0);
 }
 
 function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-generic') {
