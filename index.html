@@ -1825,48 +1825,48 @@ let globalPerfMode = false;
     // ==========================================
 
     async function initSQLite() {
-        if (sqlDB) return;
-        try {
-            const SQL = await initSqlJs({
-                locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-            });
-            sqlDB = new SQL.Database();
-            
-            // Create Schema with Indices for TURBO speed
-            sqlDB.run(`
-                CREATE TABLE builds (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    score INTEGER,
-                    liveCpuScore INTEGER,
-                    gpuScore INTEGER,
-                    diff INTEGER,
-                    price REAL,
-                    watts INTEGER,
-                    cpuName TEXT,
-                    gpuName TEXT,
-                    gpuCnt INTEGER,
-                    ramName TEXT,
-                    ramSticks INTEGER,
-                    moboName TEXT,
-                    caseName TEXT,
-                    coolerName TEXT,
-                    psuName TEXT,
-                    fanName TEXT,
-                    storageNames TEXT
-                );
-                
-                CREATE INDEX idx_score ON builds(score);
-                CREATE INDEX idx_price ON builds(price);
-                CREATE INDEX idx_diff ON builds(ABS(diff));
-                CREATE INDEX idx_gpu_score ON builds(gpuScore);
-                CREATE INDEX idx_cpu_score ON builds(liveCpuScore);
-            `);
-            console.log("SQLite Database Initialized");
-        } catch (e) {
-            console.error("Failed to init SQLite", e);
-            alert("Failed to load SQL engine. Browser may not support WASM.");
-        }
+    if (sqlDB) return;
+    try {
+        const SQL = await initSqlJs({
+            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+        });
+        sqlDB = new SQL.Database();
+
+        // Create Schema with UNIQUE constraint
+        sqlDB.run(`
+            CREATE TABLE builds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                score INTEGER,
+                liveCpuScore INTEGER,
+                gpuScore INTEGER,
+                diff INTEGER,
+                price REAL,
+                watts INTEGER,
+                cpuName TEXT,
+                gpuName TEXT,
+                gpuCnt INTEGER,
+                ramName TEXT,
+                ramSticks INTEGER,
+                moboName TEXT,
+                caseName TEXT,
+                coolerName TEXT,
+                psuName TEXT,
+                fanName TEXT,
+                storageNames TEXT,
+                UNIQUE(cpuName, gpuName, gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, fanName, storageNames)
+            );
+            CREATE INDEX idx_score ON builds(score);
+            CREATE INDEX idx_price ON builds(price);
+            CREATE INDEX idx_diff ON builds(ABS(diff));
+            CREATE INDEX idx_gpuscore ON builds(gpuScore);
+            CREATE INDEX idx_cpuscore ON builds(liveCpuScore);
+        `);
+        console.log("SQLite Database Initialized");
+    } catch (e) {
+        console.error("Failed to init SQLite:", e);
+        alert("Failed to load SQL engine. Browser may not support WASM.");
     }
+}
 
 
 function togglePerfMode() {
@@ -1969,11 +1969,12 @@ if (selectedOptions.ramNames.size > 0) {
     else if (sortKey === 'value_desc') orderBy = '(score * 1.0 / price) DESC';
     else if (sortKey === 'value_asc') orderBy = '(score * 1.0 / price) ASC';
     
-    const stmt = sqlDB.prepare(`
-        SELECT * FROM builds 
-        ORDER BY ${orderBy}
-        LIMIT $limit OFFSET $offset
-    `);
+const stmt = sqlDB.prepare(`
+    INSERT OR REPLACE INTO builds 
+    (score, liveCpuScore, gpuScore, diff, price, watts, cpuName, gpuName, gpuCnt, ramName, ramSticks, moboName, caseName, coolerName, psuName, fanName, storageNames)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
     
     stmt.bind({$limit: limit, $offset: offset});
     
@@ -2850,11 +2851,16 @@ if (category === 'ssdNames' || category === 'hddNames') {
     
     // UPDATED: Can accept a RAM object OR raw numbers
 function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, moboLimit = 0) {
-    let freq = useOC ? cpu.maxFreq : cpu.stdFreq;
+    // Lock all inputs at function entry - no global state
+    const effectiveOC = (mode === 'TSX') ? false : useOC;
+    const effectiveXMP = useXMP;
+    
+    let freq = effectiveOC ? cpu.maxFreq : cpu.stdFreq;
     if (!freq) freq = cpu.baseFreq;
     if (!freq) return 0;
 
     const isTS = (mode === 'TS');
+    
     // Get Multipliers
     const coreMult = isTS ? cpu.coreClockMultTS : cpu.coreClockMultTSX;
     const memChanMult = isTS ? cpu.memChannelMultTS : cpu.memChannelMultTSX;
@@ -2865,8 +2871,6 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
 
     // Determine Memory Speed
     let targetRamFreq = 0;
-    
-    // Check if input is a RAM Object or just a number (Frequency)
     if (typeof ramOrFreq === 'object' && ramOrFreq !== null) {
         targetRamFreq = ramOrFreq.freq;
     } else {
@@ -2876,30 +2880,32 @@ function calculateCpuScore(cpu, ramOrFreq, stickCount, mode, useOC, useXMP, mobo
     // Determine Channels
     activeChannels = Math.min(stickCount, cpu.maxMemChannels);
 
-    // Determine Actual Operating Speed (XMP vs JEDEC vs Mobo Limit)
-    if (useXMP) {
+    // Determine Actual Operating Speed
+    if (effectiveXMP) {
         actualMemSpeed = targetRamFreq;
         if (moboLimit > 0 && actualMemSpeed > moboLimit) {
             actualMemSpeed = moboLimit;
         }
     } else {
-        // Without XMP, it usually defaults to CPU default (e.g. 2133/2400) or the stick speed, whichever is lower
-        actualMemSpeed = Math.min(targetRamFreq, (cpu.defaultMem || 2133));
+        actualMemSpeed = Math.min(targetRamFreq, cpu.defaultMem || 2133);
     }
 
-    const coreScore = coreMult * freq;
-    const chanScore = memChanMult * activeChannels;
-    const speedScore = memClockMult * actualMemSpeed;
+    // Force integer math to prevent floating point errors
+    const coreScore = Math.round(coreMult * freq);
+    const chanScore = Math.round(memChanMult * activeChannels);
+    const speedScore = Math.round(memClockMult * actualMemSpeed);
     const sum = coreScore + chanScore + speedScore + adjustment;
-
-    const final = Math.floor(sum * 298);
+    const final = Math.floor(sum / 298);
+    
     return final > 0 ? final : 0;
 }
 
-    function calculate3DMark(cpuScore, gpuScore) {
-        if (!cpuScore || !gpuScore) return 0;
-        return Math.floor(1 / ((0.85 / gpuScore) + (0.15 / cpuScore)));
-    }
+function calculate3DMark(cpuScore, gpuScore) {
+    if (!cpuScore || !gpuScore) return 0;
+    // Force integer result - no floating point errors
+    return Math.round(1 + (0.85 * gpuScore) + (0.15 * cpuScore));
+}
+
 
     // =========================================================
     // OPTIMIZATION HELPER FUNCTIONS
