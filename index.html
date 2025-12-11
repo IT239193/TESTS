@@ -3166,6 +3166,9 @@ function runScanChunk(cpuIndex, config, lists) {
         return;
     }
 
+    sqlDB.run('BEGIN TRANSACTION');
+
+
     const cpu = lists.validCpu[cpuIndex];
 
     // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
@@ -3298,7 +3301,9 @@ const stmt = sqlDB.prepare(`
     }
 
     stmt.free();
-    sqlDB.run("COMMIT");
+    sqlDB.run('COMMIT');
+    sqlDB.run('END TRANSACTION');
+
 
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
     document.getElementById('resCount').innerText = `${percent}% | ${formatNumber(buildCount)} builds`;
@@ -3628,6 +3633,11 @@ function deduplicateBuilds() {
     function finishScan(config) {
 
     deduplicateBuilds(); // ADD THIS LINE
+
+    if (sqlDB) {
+        sqlDB.run('COMMIT');
+        sqlDB.run('END TRANSACTION');
+    }
     
     const btn = document.getElementById('generateBtn');
         btn.disabled = false;
