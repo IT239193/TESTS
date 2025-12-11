@@ -117,6 +117,19 @@
             font-weight: 500;
         }
 
+/* Add/Ensure this exists */
+.mode-btn.active-green {
+    background: rgba(46, 204, 113, 0.6) !important;
+    color: white !important;
+    box-shadow: inset 0 0 10px rgba(46, 204, 113, 0.3);
+    border: 1px solid var(--success) !important;
+}
+
+/* Hover state for the green button when active */
+.mode-btn.active-green:hover {
+    background: rgba(46, 204, 113, 0.8) !important;
+}
+
         .view-toggle-btn {
             position: absolute;
             top: 25px;
@@ -1180,11 +1193,29 @@
     <!-- CALCULATOR VIEW -->
     <div id="calculatorView" style="display: block;">
         <div class="controls-wrapper" id="controls">
-            <div class="section-header">1. Benchmarking & Goals</div>
-            <div class="benchmark-toggle">
-                <button id="btnTS" class="mode-btn active" onclick="setMode('TS')">Time Spy (Standard)</button>
-                <button id="btnTSX" class="mode-btn" onclick="setMode('TSX')">Time Spy Extreme (4K)</button>
-            </div>
+<!-- REPLACEMENT HTML START -->
+<div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 25px;">
+    <!-- Benchmark Type Buttons -->
+    <div>
+        <div class="benchmark-toggle" style="margin-bottom: 0;">
+            <button id="btnTS" class="mode-btn active" onclick="setMode('TS')">Time Spy (Standard)</button>
+            <button id="btnTSX" class="mode-btn" onclick="setMode('TSX')">Time Spy Extreme (4K)</button>
+        </div>
+    </div>
+
+    <!-- New Performance Mode Button -->
+    <div style="display: flex; flex-direction: column; align-items: center;">
+        <span style="font-size: 0.85em; color: var(--text-muted); font-weight: bold; margin-bottom: 5px;">
+            Performance Mode To Speed up Scan
+        </span>
+        <button id="btnPerfMode" class="mode-btn active active-green" 
+                style="border-radius: 6px; border: 1px solid var(--border); width: 100%; padding: 12px 30px;" 
+                onclick="togglePerfMode()">
+            ON
+        </button>
+    </div>
+</div>
+<!-- REPLACEMENT HTML END -->
 
             <!-- REPLACE THE FIRST .input-grid INSIDE "Benchmarking & Goals" WITH THIS -->
 <div class="input-grid">
@@ -1642,6 +1673,7 @@ const OPTIMIZE_CASE_SELECTION = true;  // If TRUE: Auto-selects the #1 Cheapest 
 
     // Global State for Toggles
     let globalUseOC = false;
+let globalPerfMode = true;
     let globalUseXMP = true;
 
     // Caching for Sorting (Still used by SQL query builder indirectly)
@@ -1784,6 +1816,20 @@ const OPTIMIZE_CASE_SELECTION = true;  // If TRUE: Auto-selects the #1 Cheapest 
             alert("Failed to load SQL engine. Browser may not support WASM.");
         }
     }
+
+
+function togglePerfMode() {
+    globalPerfMode = !globalPerfMode;
+    const btn = document.getElementById('btnPerfMode');
+    
+    if (globalPerfMode) {
+        btn.classList.add('active', 'active-green');
+        btn.innerText = "ON";
+    } else {
+        btn.classList.remove('active', 'active-green');
+        btn.innerText = "OFF";
+    }
+}
 
     function clearSQLite() {
         if(sqlDB) {
@@ -3062,7 +3108,7 @@ function runScanChunk(cpuIndex, config, lists) {
 
     const cpu = lists.validCpu[cpuIndex];
 
-    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES (Same as before)
+    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
     const availableRams = Array.from(DB.ram.values()).filter(r => {
         if (r.level > config.lvl) return false;
         if (selectedOptions.ramNames.size > 0 && !selectedOptions.ramNames.has(r.name)) return false;
@@ -3071,16 +3117,11 @@ function runScanChunk(cpuIndex, config, lists) {
         if (selectedOptions.ramSizes.size > 0 && !selectedOptions.ramSizes.has(r.size)) return false;
         return true;
     });
+    
     const uniqueXmpFreqs = [...new Set(availableRams.map(r => r.freq))].sort((a, b) => a - b);
-
+    
     const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : [null];
-
-    const uniqueDefaultSpeeds = [...new Set(
-        cpuMobos
-        .filter(m => m !== null)
-        .map(m => m.defaultMem)
-    )].sort((a, b) => a - b);
-
+    const uniqueDefaultSpeeds = [...new Set(cpuMobos.filter(m => m !== null).map(m => m.defaultMem))].sort((a, b) => a - b);
     if (uniqueDefaultSpeeds.length === 0) uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
 
     sqlDB.run("BEGIN TRANSACTION");
@@ -3094,94 +3135,107 @@ function runScanChunk(cpuIndex, config, lists) {
 
     // 2. GPU LOOP
     for (const gpuConf of precalcGpuConfigs) {
-        // Optimization: Early exit if just CPU + GPU exceeds budget
         if ((cpu.price + gpuConf.price) > config.budget) continue;
 
         // 3. STICKS LOOP
         const possibleSticks = config.reqSticks > 0 ? [config.reqSticks] : [1, 2, 4];
 
         for (const sticks of possibleSticks) {
-
-            // CHOOSE FREQUENCY LIST
+            
+            // Choose Frequency List
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
 
-            // --- OPTIMIZATION START: BUFFERING RESULTS ---
-            // Instead of stopping at the first match, we will store all valid frequency outcomes here
-            const validFreqCandidates = [];
+            // =========================================================
+            //  LOGIC SPLIT: PERFORMANCE MODE (v1) VS THOROUGH (r)
+            // =========================================================
+            
+            if (globalPerfMode) {
+                // --- PERFORMANCE MODE ON (v1.txt Logic) ---
+                // Stops looking for frequencies as soon as one works for this CPU/GPU/Stick combo
+                
+                let foundWorkingSpec = false;
 
-            for (const freq of freqsToTest) {
-                // 4. CALCULATE SCORE (Virtual Test)
-                const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
-                const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+                for (const freq of freqsToTest) {
+                    if (foundWorkingSpec) break; // Optimization: Stop after first match
 
-                // Filter by Min/Max Target Score
-                if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
-                    continue; 
+                    const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+
+                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
+
+                    foundWorkingSpec = true;
+
+                    // Find RAM & Mobo for this freq
+                    const validRams = availableRams.filter(r => {
+                        if (r.freq < freq) return false;
+                        if (!cpu.memTypes.includes(r.type)) return false;
+                        if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
+                        return true;
+                    }).sort((a, b) => a.price - b.price);
+
+                    if (validRams.length === 0) continue;
+
+                    const validMobos = cpuMobos.filter(m => {
+                        if (!m) return true;
+                        if (validRams[0].type !== m.ramType) return false;
+                        if (gpuConf.count > 1 && m.pciSlots < 5) return false;
+                        if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
+                        if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
+                        if (sticks === 4 && m.size === 'Mini-ITX') return false;
+                        if (config.useXMP) { if (m.maxMemSpeed < freq) return false; } 
+                        else { if (m.defaultMem !== freq) return false; }
+                        return true;
+                    });
+
+                    // Optimization: Only use top 1 RAM
+                    const ramCap = 1; 
+                    assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
 
-                // If we are here, this Frequency + CPU + GPU + Sticks combination works for the score.
-                // Add it to candidates.
-                validFreqCandidates.push({
-                    freq: freq,
-                    totalScore: totalScore,
-                    liveCpuScore: liveCpuScore
-                });
+            } else {
+                // --- PERFORMANCE MODE OFF (r.txt Logic) ---
+                // Buffers ALL valid frequencies for this CPU/GPU/Stick combo, then generates builds for ALL of them.
+                
+                const validFreqCandidates = [];
+
+                for (const freq of freqsToTest) {
+                    const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+
+                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
+
+                    validFreqCandidates.push({ freq, totalScore, liveCpuScore });
+                }
+
+                for (const candidate of validFreqCandidates) {
+                    const { freq, totalScore, liveCpuScore } = candidate;
+
+                    const validRams = availableRams.filter(r => {
+                        if (r.freq < freq) return false;
+                        if (!cpu.memTypes.includes(r.type)) return false;
+                        if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
+                        return true;
+                    }).sort((a, b) => a.price - b.price);
+
+                    if (validRams.length === 0) continue;
+
+                    const validMobos = cpuMobos.filter(m => {
+                        if (!m) return true;
+                        if (validRams[0].type !== m.ramType) return false;
+                        if (gpuConf.count > 1 && m.pciSlots < 5) return false;
+                        if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
+                        if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
+                        if (sticks === 4 && m.size === 'Mini-ITX') return false;
+                        if (config.useXMP) { if (m.maxMemSpeed < freq) return false; } 
+                        else { if (m.defaultMem !== freq) return false; }
+                        return true;
+                    });
+
+                    // Even in r.txt logic, we usually only pick the cheapest RAM per frequency to avoid DB explosion
+                    const ramCap = 1;
+                    assembleBuilds(validRams.slice(0, ramCap), validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
+                }
             }
-
-            // --- PROCESS CANDIDATES ---
-            // Now we process ALL valid frequencies found above. 
-            // This ensures we get the cheap 2133MHz builds AND the high-performance 4000MHz builds.
-            
-            for (const candidate of validFreqCandidates) {
-                const { freq, totalScore, liveCpuScore } = candidate;
-
-                // A. Find RAM matching this specific frequency
-                const validRams = availableRams.filter(r => {
-                    if (r.freq < freq) return false; // Must be at least this fast
-                    
-                    // Compatibility
-                    const memType = r.type;
-                    if (!cpu.memTypes.includes(memType)) return false;
-                    if (config.targetRamVal > 0 && (r.size * sticks) !== config.targetRamVal) return false;
-                    
-                    // For XMP OFF logic (optimization):
-                    // If we aren't using XMP, high speed RAM is a waste of money if it downclocks.
-                    // But we still allow it if it's the only option. 
-                    
-                    return true;
-                }).sort((a, b) => a.price - b.price);
-
-                if (validRams.length === 0) continue;
-
-                // B. Find Motherboards
-                const validMobos = cpuMobos.filter(m => {
-                    if (!m) return true;
-                    if (validRams[0].type !== m.ramType) return false;
-                    if (gpuConf.count > 1 && m.pciSlots < 5) return false;
-                    if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
-                    if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
-                    if (sticks === 4 && m.size === 'Mini-ITX') return false;
-
-                    if (config.useXMP) {
-                        if (m.maxMemSpeed < freq) return false;
-                    } else {
-                        if (m.defaultMem !== freq) return false;
-                    }
-                    return true;
-                });
-
-                // C. ASSEMBLE
-                // OPTIMIZE_BUILD_RESULTS limits RAM results per frequency to the top 1 cheapest
-                // to prevent 50 results of the exact same build with slightly different RAM brands.
-                const ramCap = 1;
-
-                assembleBuilds(
-                    validRams.slice(0, ramCap),
-                    validMobos,
-                    cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt
-                );
-            }
-            // --- OPTIMIZATION END ---
         }
     }
 
@@ -3191,7 +3245,6 @@ function runScanChunk(cpuIndex, config, lists) {
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
     document.getElementById('resCount').innerText = `${percent}% | ${formatNumber(buildCount)} builds`;
     
-    // Use setTimeout to unblock the main thread
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
 
