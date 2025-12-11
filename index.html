@@ -3446,7 +3446,8 @@ if (b.ram) {
         b.ram, 
         buildIdx, 
         'ram', 
-        `${b.ramSticks}x | ${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB`
+        `${b.ramSticks}x | ${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB`,
+        'brand-ram'  // ← ADD THIS
     );
 }
             
@@ -3457,28 +3458,21 @@ if (b.mobo) {
         b.mobo,
         buildIdx,
         'mobo',
-        `${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}`
+        `${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}`,
+        'brand-aux'  // ← ADD THIS
     );
 }
+
+
 if (b.psu) {
     auxHTML += renderInteractive('PSU',
         b.psu,
         buildIdx,
         'psu',
-        `${b.psu.watts}W | Length: ${b.psu.length}mm`
+        `${b.psu.watts}W | Length: ${b.psu.length}mm`,
+        'brand-aux'  // ← ADD THIS
     );
 }
-            if (b.psu) {
-                auxHTML += `
-                <div class="part-row brand-aux text-colored">
-                    <div class="part-header">
-                        <span class="part-label">PSU</span>
-                        <span class="part-price">${formatCurrency(b.psu.price)}</span>
-                    </div>
-                    <div class="part-name">${b.psu.name}</div>
-                    <div class="part-specs">${b.psu.watts}W | Length: ${b.psu.length}mm</div>
-                </div>`;
-            }
 
             let interactiveHTML = '';
             
@@ -3573,10 +3567,19 @@ if (b.psu) {
         document.getElementById('btnNext').disabled = (page === totalPages || totalPages === 0);
     }
 
-    function renderInteractive(label, part, bIdx, type, specs) {
-        let price = part.price;
-        return `
-        <div class="part-row interactive brand-generic" onclick="openSwapPopup('${type}', ${bIdx})">
+    function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-generic') {
+    let price = part.price;
+    return `
+    <div class="part-row interactive ${colorClass} text-colored" onclick="openSwapPopup('${type}', ${bIdx})">
+        <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
+        <div class="part-header">
+            <span class="part-label">${label}</span>
+            <span class="part-price">${formatCurrency(price)}</span>
+        </div>
+        <div class="part-name">${part.name}</div>
+        <div class="part-specs">${specs}</div>
+    </div>`;
+}
             <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
             <div class="part-header">
                 <span class="part-label">${label}</span>
