@@ -1700,6 +1700,8 @@ const OPTIMIZE_CASE_SELECTION = true;  // If TRUE: Auto-selects the #1 Cheapest 
 
     // SQLite Global
     let sqlDB = null;
+let activeScanTransaction = false;
+
     let buildCount = 0;
 
     const selectedOptions = {
@@ -2970,210 +2972,107 @@ function calculate3DMark(cpuScore, gpuScore) {
     
     let precalcGpuConfigs = []; // Stores flattened valid GPU configs
 
+// GLOBAL - dosyanın en üstüne ekle (diğer let/const'ların yanına)
+let activeScanTransaction = false;
 
-
-    async function generateBuilds() {
-        // Safety Checks
-        if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
-        
-        // Ensure SQL is ready
-        if (!sqlDB) {
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            document.getElementById('loadingOverlay').style.opacity = '1';
-            await initSQLite();
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-
-        // Reset state
-        builds = [];
-        precalcGpuConfigs = [];
-        clearSQLite();
-        
-        document.getElementById('resCount').innerText = "0% Scanned...";
-        document.getElementById('scanStatus').innerText = "Running Scan...";
-        
-        const btn = document.getElementById('generateBtn');
-        btn.disabled = true;
-        btn.innerText = "SCANNING...";
-
-        // --- 1. GATHER INPUTS ---
-        const config = {
-            budget: parseVal('budget'),
-            minGenScore: parseVal('minTargetScore'), 
-            maxGenScore: parseVal('targetScore'), 
-            lvl: parseInt(document.getElementById('level').value) || 30,
-            sort: document.getElementById('mainSort').value,
-            useOC: globalUseOC,
-            useXMP: globalUseXMP,
-            useRamPerfMode: document.getElementById('ramPerfMode').checked,
-            limitTotalW: parseInt(document.getElementById('maxTotalWatts').value),
-            limitCpuW: parseInt(document.getElementById('maxCpuWatts').value),
-            limitGpuW: parseInt(document.getElementById('maxGpuWatts').value),
-            extraW: parseInt(document.getElementById('extraWatts').value) || 0,
-            useRam: document.getElementById('incRam').checked && Loaded.ram,
-            useMobo: document.getElementById('incMobo').checked && Loaded.mobo,
-            useCase: document.getElementById('incCase').checked && Loaded.cases,
-            useCooler: document.getElementById('incCooler').checked && Loaded.cooler,
-            usePsu: document.getElementById('incPsu').checked && Loaded.psu,
-            useFan: document.getElementById('incFans').checked && Loaded.fan,
-            useStorage: document.getElementById('incStorage').checked && Loaded.storage,
-            reqSticks: parseInt(document.getElementById('ramSticks').value),
-            targetRamVal: parseIntVal('targetTotalRam'),
-            currentMode: currentMode
-        };
-
-        // --- 2. PREPARE AUX LISTS (STRICT PRICE SORTING) ---
-        // We explicitly sort these by Price Ascending so the assembler always picks the cheapest fit.
-        
-        let rawCases = Array.from(DB.cases.values()).filter(c => {
-            if (c.level > config.lvl) return false;
-            if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-            return true;
-        });
-        
-        const lists = {
-            allCases: rawCases.sort((a,b) => a.price - b.price),
-            
-            allCoolers: config.useCooler ? Array.from(DB.cooler.values())
-                .filter(c => c.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : [],
-                
-            allPsu: config.usePsu ? Array.from(DB.psu.values())
-                .filter(p => p.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : [], // Ensure Cheapest PSU is first
-                
-            allFans: config.useFan ? Array.from(DB.fan.values())
-                .filter(f => f.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : []
-        };
-        
-        // --- 3. STORAGE & MIN COSTS ---
-        let minAuxCost = 0;
-        let totalStorageCost = 0;
-        let finalStorageList = [];
-
-        selectedOptions.ssdNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= config.lvl) { 
-                for(let i=0; i<count; i++) { finalStorageList.push(part); totalStorageCost += part.price; }
-            }
-        });
-        selectedOptions.hddNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= config.lvl) { 
-                for(let i=0; i<count; i++) { finalStorageList.push(part); totalStorageCost += part.price; }
-            }
-        });
-
-        // Fallback storage if none selected but required
-        if (config.useStorage && finalStorageList.length === 0) {
-            const fallback = Array.from(DB.storage.values())
-                .filter(s => s.type !== 'HDD' && s.level <= config.lvl)
-                .sort((a,b) => a.price - b.price)[0];
-            if (fallback) {
-                finalStorageList.push(fallback);
-                totalStorageCost += fallback.price;
-            }
-        }
-        minAuxCost += totalStorageCost;
-
-        // Add minimum costs of required parts to fail fast
-        if (config.useCase && lists.allCases.length > 0) minAuxCost += lists.allCases[0].price;
-        if (config.usePsu && lists.allPsu.length > 0) minAuxCost += lists.allPsu[0].price;
-        if (config.useCooler && lists.allCoolers.length > 0) minAuxCost += lists.allCoolers[0].price;
-
-        lists.minAuxCost = minAuxCost;
-        lists.finalStorageList = finalStorageList;
-        lists.totalStorageCost = totalStorageCost;
-
-        // --- 4. PREPARE CPU LIST ---
-        lists.validCpu = Array.from(DB.cpu.values()).filter(c => {
-            if (c.level > config.lvl) return false;
-            if (config.limitCpuW && (c.watts || 0) > config.limitCpuW) return false;
-            if (selectedOptions.socket.size > 0 && !selectedOptions.socket.has(c.socket)) return false;
-            if (selectedOptions.cpuNames.size > 0 && !selectedOptions.cpuNames.has(c.name)) return false;
-            return true;
-        }).sort((a,b) => (currentMode === 'TS' ? b.scoreTS - a.scoreTS : b.scoreTSX - a.scoreTSX));
-
-        // --- 5. GPU LIST (RAW VS OPTIMIZED) ---
-        let allGpus = [];
-        if (OPTIMIZE_LISTS) {
-            allGpus = getOptimizedGpuList(Array.from(DB.gpu.values()), config.lvl);
-        } else {
-            allGpus = Array.from(DB.gpu.values()).filter(g => {
-                if (g.level > config.lvl) return false;
-                if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
-                if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return false;
-                if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
-                return true;
-            }).sort((a,b) => b.score - a.score);
-        }
-
-        // --- 6. FLATTEN GPU LIST (SINGLE/DUAL/ETC) ---
-        let selectedCounts = Array.from(selectedOptions.gpuCount);
-        if (selectedCounts.length === 0) selectedCounts = [1, 2, 3, 4];
-        
-        precalcGpuConfigs = [];
-        for (const gpu of allGpus) {
-             for (const cnt of selectedCounts) {
-                 if (cnt === 2 && !gpu.score2) continue;
-                 if (cnt === 3 && !gpu.score3) continue;
-                 if (cnt === 4 && !gpu.score4) continue;
-                 if (cnt > 1) {
-                     const maxCap = getMultiGPUCap(gpu.name, gpu.length);
-                     if (maxCap < cnt) continue;
-                 }
-                 
-                 const totalGpuWatts = gpu.watts * cnt;
-                 if (config.limitGpuW && gpu.watts > config.limitGpuW) continue;
-
-                 const score = cnt === 1 ? gpu.score : (cnt === 2 ? gpu.score2 : (cnt === 3 ? gpu.score3 : gpu.score4));
-                 if (!score) continue;
-
-                 precalcGpuConfigs.push({
-                     gpu: gpu,
-                     count: cnt,
-                     score: score,
-                     price: gpu.price * cnt,
-                     watts: totalGpuWatts,
-                     sliType: cnt > 1 ? gpu.sliType : null
-                 });
-             }
-        }
-        
-        // --- 7. MOTHERBOARD LIST ---
-        let moboSource = Array.from(DB.mobo.values()).filter(m => {
-            if (m.level > config.lvl) return false;
-            if (selectedOptions.moboNames.size > 0 && !selectedOptions.moboNames.has(m.name)) return false;
-            return true;
-        });
-
-        if (OPTIMIZE_BUILD_RESULTS) {
-            lists.validMobos = getOptimizedMoboList(moboSource, config.lvl);
-        } else {
-            lists.validMobos = moboSource.sort((a,b) => a.price - b.price);
-        }
-        
-        // Start Async Processing
-        runScanChunk(0, config, lists);
+// 1. TAM generateBuilds fonksiyonu
+function generateBuilds() {
+    if (!sqlDB) {
+        alert('Database not initialized yet.');
+        return;
     }
 
-let activeScanTransaction = false; // globals'ta
+    clearSQLite();
+    document.getElementById('scanStatus').innerText = 'Scanning...';
+    document.getElementById('resCount').innerText = '0% | 0 builds';
 
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.innerText = 'SCANNING...';
+
+    const budget = parseVal('budget') || 999999;
+    const minTargetScore = parseVal('minTargetScore') || 0;
+    const targetScore = parseVal('targetScore') || 999999;
+    const minScoreInput = parseVal('minScoreInput') || 0;
+
+    const level = parseIntVal('level') || 1;
+    const resultsPerPage = parseIntVal('resultsPerPage') || 100;
+    itemsPerPage = resultsPerPage;
+
+    const maxTotalWatts = parseIntVal('maxTotalWatts') || 0;
+    const maxCpuWatts = parseIntVal('maxCpuWatts') || 0;
+    const maxGpuWatts = parseIntVal('maxGpuWatts') || 0;
+    const extraWatts = parseIntVal('extraWatts') || 0;
+
+    const incRam = document.getElementById('incRam').checked;
+    const incMobo = document.getElementById('incMobo').checked;
+    const incCase = document.getElementById('incCase').checked;
+    const incCooler = document.getElementById('incCooler').checked;
+    const incPsu = document.getElementById('incPsu').checked;
+    const incFans = document.getElementById('incFans').checked;
+    const incStorage = document.getElementById('incStorage').checked;
+
+    const reqSticks = parseIntVal('ramSticks') || 0;
+    const targetTotalRam = parseIntVal('targetTotalRam') || 0;
+
+    const config = {
+        budget, minGenScore: minTargetScore || minScoreInput, maxGenScore: targetScore,
+        lvl: level, maxTotalWatts, maxCpuWatts, maxGpuWatts, extraWatts,
+        incRam, useMobo: incMobo, incCase, incCooler, incPsu, incFans, incStorage,
+        reqSticks, targetRamVal: targetTotalRam, currentMode, useOC: globalUseOC, useXMP: globalUseXMP
+    };
+
+    // Filtreli CPU, GPU, Mobo listeleri
+    const cpus = Array.from(DB.cpu.values()).filter(c => c.level <= level);
+    const gpus = Array.from(DB.gpu.values()).filter(g => g.level <= level);
+    const mobos = Array.from(DB.mobo.values()).filter(m => m.level <= level);
+
+    let validCpu = cpus.filter(c => 
+        (selectedOptions.cpuNames.size === 0 || selectedOptions.cpuNames.has(c.name)) &&
+        (selectedOptions.socket.size === 0 || selectedOptions.socket.has(c.socket))
+    );
+
+    let validGpus = gpus.filter(g => 
+        (selectedOptions.gpuNames.size === 0 || selectedOptions.gpuNames.has(g.name)) &&
+        (selectedOptions.vram.size === 0 || selectedOptions.vram.has(g.vram)) &&
+        (selectedOptions.length.size === 0 || selectedOptions.length.has(g.length))
+    );
+
+    let validMobos = mobos.filter(m => 
+        selectedOptions.moboNames.size === 0 || selectedOptions.moboNames.has(m.name)
+    );
+
+    const gpuCnt = Array.from(selectedOptions.gpuCount).length ? 
+        Math.max(...Array.from(selectedOptions.gpuCount)) : 1;
+
+    // CRITICAL: precalcGpuConfigs dizisi
+    const precalcGpuConfigs = validGpus.map(g => ({
+        name: g.name,
+        score: gpuCnt === 1 ? g.score : (gpuCnt === 2 ? g.score2 : gpuCnt === 3 ? g.score3 : g.score4 || g.score),
+        price: g.price * gpuCnt,
+        sliType: g.sliType || ''
+    }));
+
+    const lists = { validCpu, validMobos, precalcGpuConfigs, gpuCnt };
+
+    if (validCpu.length === 0 || precalcGpuConfigs.length === 0) {
+        document.getElementById('scanStatus').innerText = 'No valid CPU/GPU found.';
+        btn.disabled = false; btn.innerText = 'GENERATE BUILDS';
+        return;
+    }
+
+    runScanChunk(0, config, lists);
+}
+
+// 2. TAM runScanChunk fonksiyonu
 function runScanChunk(cpuIndex, config, lists) {
-    // CPU listesi bitti veya boş
     if (cpuIndex >= lists.validCpu.length) {
         if (sqlDB && activeScanTransaction) {
             try {
-                sqlDB.run('COMMIT');
-                sqlDB.run('END TRANSACTION');
+                sqlDB.run('COMMIT'); sqlDB.run('END TRANSACTION');
             } catch (e) {
-                console.error('Transaction kapatma hatası:', e);
-                try {
-                    sqlDB.run('ROLLBACK');
-                } catch (e2) {
-                    console.error('Rollback da başarısız:', e2);
-                }
+                console.error('Transaction kapatma:', e);
+                try { sqlDB.run('ROLLBACK'); } catch (e2) { console.error('Rollback:', e2); }
             }
             activeScanTransaction = false;
         }
@@ -3181,21 +3080,16 @@ function runScanChunk(cpuIndex, config, lists) {
         return;
     }
 
-    // Transaction sadece ilk CPU’da başlasın
     if (cpuIndex === 0 && !activeScanTransaction) {
         try {
             sqlDB.run('BEGIN TRANSACTION');
             activeScanTransaction = true;
             console.log('Transaction başlatıldı');
-        } catch (e) {
-            console.error('Transaction başlatma hatası', e);
-        }
+        } catch (e) { console.error('Transaction başlatma:', e); }
     }
 
     const cpu = lists.validCpu[cpuIndex];
-
-    // 1) RAM havuzu
-    const availableRams = Array.from(DB.ram.values).filter(r =>
+    const availableRams = Array.from(DB.ram.values()).filter(r =>
         r.level <= config.lvl &&
         (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
         (selectedOptions.ramMfgrs.size === 0 || selectedOptions.ramMfgrs.has(r.mfgr)) &&
@@ -3204,152 +3098,82 @@ function runScanChunk(cpuIndex, config, lists) {
     );
 
     const uniqueXmpFreqs = [...new Set(availableRams.map(r => r.freq))].sort((a, b) => a - b);
+    const cpuMobos = config.useMobo ? lists.validMobos.filter(m => m.socket === cpu.socket) : null;
+    const uniqueDefaultSpeeds = [...new Set(cpuMobos?.map(m => m.defaultMem) ?? [])].sort((a, b) => a - b) || [cpu.defaultMem || 2133];
 
-    const cpuMobos = config.useMobo
-        ? lists.validMobos.filter(m => m.socket === cpu.socket)
-        : null;
+    const stmt = sqlDB.prepare('INSERT OR REPLACE INTO builds(score,liveCpuScore,gpuScore,diff,price,watts,cpuName,gpuName,gpuCnt,ramName,ramSticks,moboName,caseName,coolerName,psuName,fanName,storageNames)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
 
-    const uniqueDefaultSpeeds = [...new Set(
-        cpuMobos?.filter(m => m != null).map(m => m.defaultMem) ?? []
-    )].sort((a, b) => a - b);
-
-    if (uniqueDefaultSpeeds.length === 0) {
-        uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
-    }
-
-    // SQL INSERT
-    const stmt = sqlDB.prepare(
-        'INSERT OR REPLACE INTO builds ' +
-        '(score, liveCpuScore, gpuScore, diff, price, watts, ' +
-        'cpuName, gpuName, gpuCnt, ramName, ramSticks, ' +
-        'moboName, caseName, coolerName, psuName, fanName, storageNames) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-
-    // 2) GPU LOOP – BURASI ÖNEMLİ: precalcGpuConfigs
+    // GPU LOOP - CRITICAL: precalcGpuConfigs kullan
     for (const gpuConf of lists.precalcGpuConfigs) {
         if (cpu.price + gpuConf.price > config.budget) continue;
-
-        // 3) RAM stick sayısı
         const possibleSticks = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
-
+        
         for (const sticks of possibleSticks) {
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
-
+            
             if (globalPerfMode) {
-                // PERFORMANCE MODE ON
                 let foundWorkingSpec = false;
-
                 for (const freq of freqsToTest) {
                     if (foundWorkingSpec) break;
-
-                    const liveCpuScore = calculateCpuScore(
-                        cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
-                    );
-
-                    const totalScore = calculate3DMark(
-                        liveCpuScore,
-                        gpuConf.score * lists.gpuCnt
-                    );
-
-                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
-                        continue;
-                    }
-
+                    const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
+                    
                     foundWorkingSpec = true;
-
-                    const validRams = availableRams
-                        .filter(r =>
-                            r.freq === freq &&
-                            cpu.memTypes.includes(r.type) &&
-                            (config.targetRamVal === 0 || r.size * sticks >= config.targetRamVal)
-                        )
-                        .sort((a, b) => a.price - b.price);
-
+                    const validRams = availableRams.filter(r => r.freq === freq && cpu.memTypes.includes(r.type) && (config.targetRamVal === 0 || r.size * sticks >= config.targetRamVal)).sort((a, b) => a.price - b.price);
                     if (validRams.length === 0) continue;
-
+                    
                     const validMobos = cpuMobos?.filter(m => {
-                        if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
                         if (lists.gpuCnt > 1 && m.pciSlots < 5) return false;
-                        if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
-                        if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
                         if (config.useXMP && m.maxMemSpeed < freq) return false;
-                        if (!config.useXMP && m.defaultMem !== freq) return false;
                         return true;
                     }) ?? [];
-
+                    
                     if (validMobos.length === 0 && config.useMobo) continue;
-
-                    assembleBuilds(
-                        validRams, validMobos, cpu, gpuConf, sticks,
-                        totalScore, liveCpuScore, config, lists, stmt
-                    );
+                    assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
             } else {
-                // PERFORMANCE MODE OFF
-                const validFreqCandidates = [];
-
                 for (const freq of freqsToTest) {
-                    const liveCpuScore = calculateCpuScore(
-                        cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
-                    );
-
-                    const totalScore = calculate3DMark(
-                        liveCpuScore,
-                        gpuConf.score * lists.gpuCnt
-                    );
-
-                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
-                        continue;
-                    }
-
-                    validFreqCandidates.push([freq, totalScore, liveCpuScore]);
-                }
-
-                for (const [freq, totalScore, liveCpuScore] of validFreqCandidates) {
-                    const validRams = availableRams
-                        .filter(r =>
-                            r.freq === freq &&
-                            cpu.memTypes.includes(r.type) &&
-                            (config.targetRamVal === 0 || r.size * sticks >= config.targetRamVal)
-                        )
-                        .sort((a, b) => a.price - b.price);
-
+                    const liveCpuScore = calculateCpuScore(cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+                    if (totalScore < config.minGenScore || totalScore > config.maxGenScore) continue;
+                    
+                    const validRams = availableRams.filter(r => r.freq === freq && cpu.memTypes.includes(r.type) && (config.targetRamVal === 0 || r.size * sticks >= config.targetRamVal)).sort((a, b) => a.price - b.price);
                     if (validRams.length === 0) continue;
-
+                    
                     const validMobos = cpuMobos?.filter(m => {
-                        if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
                         if (lists.gpuCnt > 1 && m.pciSlots < 5) return false;
-                        if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
-                        if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
                         if (config.useXMP && m.maxMemSpeed < freq) return false;
-                        if (!config.useXMP && m.defaultMem !== freq) return false;
                         return true;
                     }) ?? [];
-
+                    
                     if (validMobos.length === 0 && config.useMobo) continue;
-
-                    assembleBuilds(
-                        validRams, validMobos, cpu, gpuConf, sticks,
-                        totalScore, liveCpuScore, config, lists, stmt
-                    );
+                    assembleBuilds(validRams, validMobos, cpu, gpuConf, sticks, totalScore, liveCpuScore, config, lists, stmt);
                 }
             }
         }
     }
 
     stmt.free();
-
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
-    document.getElementById('resCount').innerText =
-        percent + '% | ' + formatNumber(buildCount) + ' builds';
-
+    document.getElementById('resCount').innerText = percent + '% | ' + formatNumber(buildCount) + ' builds';
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
+
+// 3. clearSQLite güncellemesi
+function clearSQLite() {
+    if (sqlDB) {
+        sqlDB.run('DELETE FROM builds');
+        sqlDB.run("DELETE FROM sqlite_sequence WHERE name='builds'");
+    }
+    buildCount = 0;
+    activeScanTransaction = false;
+}
+
 
 
 
@@ -3383,193 +3207,6 @@ function clearSQLite() {
 }
 
 
-
-
-async function generateBuilds() {
-        // Safety Checks
-        if (!Loaded.cpu || !Loaded.gpu) return alert("Wait for Data Load!");
-        
-        // Ensure SQL is ready
-        if (!sqlDB) {
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            document.getElementById('loadingOverlay').style.opacity = '1';
-            await initSQLite();
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-
-        // Reset state
-        builds = [];
-        precalcGpuConfigs = [];
-        clearSQLite();
-        
-        document.getElementById('resCount').innerText = "0% Scanned...";
-        document.getElementById('scanStatus').innerText = "Running Scan...";
-        
-        const btn = document.getElementById('generateBtn');
-        btn.disabled = true;
-        btn.innerText = "SCANNING...";
-
-        // --- 1. GATHER INPUTS ---
-        const config = {
-            budget: parseVal('budget'),
-            minGenScore: parseVal('minTargetScore'), 
-            maxGenScore: parseVal('targetScore'), 
-            lvl: parseInt(document.getElementById('level').value) || 30,
-            sort: document.getElementById('mainSort').value,
-            useOC: globalUseOC,
-            useXMP: globalUseXMP,
-            useRamPerfMode: document.getElementById('ramPerfMode').checked,
-            limitTotalW: parseInt(document.getElementById('maxTotalWatts').value),
-            limitCpuW: parseInt(document.getElementById('maxCpuWatts').value),
-            limitGpuW: parseInt(document.getElementById('maxGpuWatts').value),
-            extraW: parseInt(document.getElementById('extraWatts').value) || 0,
-            useRam: document.getElementById('incRam').checked && Loaded.ram,
-            useMobo: document.getElementById('incMobo').checked && Loaded.mobo,
-            useCase: document.getElementById('incCase').checked && Loaded.cases,
-            useCooler: document.getElementById('incCooler').checked && Loaded.cooler,
-            usePsu: document.getElementById('incPsu').checked && Loaded.psu,
-            useFan: document.getElementById('incFans').checked && Loaded.fan,
-            useStorage: document.getElementById('incStorage').checked && Loaded.storage,
-            reqSticks: parseInt(document.getElementById('ramSticks').value),
-            targetRamVal: parseIntVal('targetTotalRam'),
-            currentMode: currentMode
-        };
-
-        // --- 2. PREPARE AUX LISTS (STRICT PRICE SORTING) ---
-        // We explicitly sort these by Price Ascending so the assembler always picks the cheapest fit.
-        
-        let rawCases = Array.from(DB.cases.values()).filter(c => {
-            if (c.level > config.lvl) return false;
-            if (selectedOptions.caseNames.size > 0 && !selectedOptions.caseNames.has(c.name)) return false;
-            return true;
-        });
-        
-        const lists = {
-            allCases: rawCases.sort((a,b) => a.price - b.price),
-            
-            allCoolers: config.useCooler ? Array.from(DB.cooler.values())
-                .filter(c => c.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : [],
-                
-            allPsu: config.usePsu ? Array.from(DB.psu.values())
-                .filter(p => p.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : [], // Ensure Cheapest PSU is first
-                
-            allFans: config.useFan ? Array.from(DB.fan.values())
-                .filter(f => f.level <= config.lvl)
-                .sort((a,b) => a.price - b.price) : []
-        };
-        
-        // --- 3. STORAGE & MIN COSTS ---
-        let minAuxCost = 0;
-        let totalStorageCost = 0;
-        let finalStorageList = [];
-
-        selectedOptions.ssdNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= config.lvl) { 
-                for(let i=0; i<count; i++) { finalStorageList.push(part); totalStorageCost += part.price; }
-            }
-        });
-        selectedOptions.hddNames.forEach((count, name) => {
-            const part = DB.storage.get(name);
-            if (part && part.level <= config.lvl) { 
-                for(let i=0; i<count; i++) { finalStorageList.push(part); totalStorageCost += part.price; }
-            }
-        });
-
-        // Fallback storage if none selected but required
-        if (config.useStorage && finalStorageList.length === 0) {
-            const fallback = Array.from(DB.storage.values())
-                .filter(s => s.type !== 'HDD' && s.level <= config.lvl)
-                .sort((a,b) => a.price - b.price)[0];
-            if (fallback) {
-                finalStorageList.push(fallback);
-                totalStorageCost += fallback.price;
-            }
-        }
-        minAuxCost += totalStorageCost;
-
-        // Add minimum costs of required parts to fail fast
-        if (config.useCase && lists.allCases.length > 0) minAuxCost += lists.allCases[0].price;
-        if (config.usePsu && lists.allPsu.length > 0) minAuxCost += lists.allPsu[0].price;
-        if (config.useCooler && lists.allCoolers.length > 0) minAuxCost += lists.allCoolers[0].price;
-
-        lists.minAuxCost = minAuxCost;
-        lists.finalStorageList = finalStorageList;
-        lists.totalStorageCost = totalStorageCost;
-
-        // --- 4. PREPARE CPU LIST ---
-        lists.validCpu = Array.from(DB.cpu.values()).filter(c => {
-            if (c.level > config.lvl) return false;
-            if (config.limitCpuW && (c.watts || 0) > config.limitCpuW) return false;
-            if (selectedOptions.socket.size > 0 && !selectedOptions.socket.has(c.socket)) return false;
-            if (selectedOptions.cpuNames.size > 0 && !selectedOptions.cpuNames.has(c.name)) return false;
-            return true;
-        }).sort((a,b) => (currentMode === 'TS' ? b.scoreTS - a.scoreTS : b.scoreTSX - a.scoreTSX));
-
-        // --- 5. GPU LIST (RAW VS OPTIMIZED) ---
-        let allGpus = [];
-        if (OPTIMIZE_LISTS) {
-            allGpus = getOptimizedGpuList(Array.from(DB.gpu.values()), config.lvl);
-        } else {
-            allGpus = Array.from(DB.gpu.values()).filter(g => {
-                if (g.level > config.lvl) return false;
-                if (selectedOptions.gpuNames.size > 0 && !selectedOptions.gpuNames.has(g.name)) return false;
-                if (selectedOptions.vram.size > 0 && !selectedOptions.vram.has(g.vram)) return false;
-                if (selectedOptions.length.size > 0 && !selectedOptions.length.has(g.length)) return false;
-                return true;
-            }).sort((a,b) => b.score - a.score);
-        }
-
-        // --- 6. FLATTEN GPU LIST (SINGLE/DUAL/ETC) ---
-        let selectedCounts = Array.from(selectedOptions.gpuCount);
-        if (selectedCounts.length === 0) selectedCounts = [1, 2, 3, 4];
-        
-        precalcGpuConfigs = [];
-        for (const gpu of allGpus) {
-             for (const cnt of selectedCounts) {
-                 if (cnt === 2 && !gpu.score2) continue;
-                 if (cnt === 3 && !gpu.score3) continue;
-                 if (cnt === 4 && !gpu.score4) continue;
-                 if (cnt > 1) {
-                     const maxCap = getMultiGPUCap(gpu.name, gpu.length);
-                     if (maxCap < cnt) continue;
-                 }
-                 
-                 const totalGpuWatts = gpu.watts * cnt;
-                 if (config.limitGpuW && gpu.watts > config.limitGpuW) continue;
-
-                 const score = cnt === 1 ? gpu.score : (cnt === 2 ? gpu.score2 : (cnt === 3 ? gpu.score3 : gpu.score4));
-                 if (!score) continue;
-
-                 precalcGpuConfigs.push({
-                     gpu: gpu,
-                     count: cnt,
-                     score: score,
-                     price: gpu.price * cnt,
-                     watts: totalGpuWatts,
-                     sliType: cnt > 1 ? gpu.sliType : null
-                 });
-             }
-        }
-        
-        // --- 7. MOTHERBOARD LIST ---
-        let moboSource = Array.from(DB.mobo.values()).filter(m => {
-            if (m.level > config.lvl) return false;
-            if (selectedOptions.moboNames.size > 0 && !selectedOptions.moboNames.has(m.name)) return false;
-            return true;
-        });
-
-        if (OPTIMIZE_BUILD_RESULTS) {
-            lists.validMobos = getOptimizedMoboList(moboSource, config.lvl);
-        } else {
-            lists.validMobos = moboSource.sort((a,b) => a.price - b.price);
-        }
-        
-        // Start Async Processing
-        runScanChunk(0, config, lists);
-    }
 
     function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, config, lists, stmt) {
         // 1. Loop through RAMs
