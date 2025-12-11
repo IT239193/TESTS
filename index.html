@@ -3289,8 +3289,7 @@ function runScanChunk(cpuIndex, config, lists) {
     // COMMIT'i SADECE SON chunk'ta yap
     if (cpuIndex === lists.validCpu.length - 1) {
         try {
-            sqlDB.run('COMMIT');
-            sqlDB.run('END TRANSACTION');
+
         } catch (e) {
             console.error('Transaction kapatma hatası:', e);
             sqlDB.run('ROLLBACK');
