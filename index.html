@@ -100,6 +100,52 @@
             position: relative;
         }
 
+/* Add inside <style> */
+
+.btn-revert {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: var(--warning);
+    color: #000;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 0 5px rgba(241, 196, 15, 0.5);
+    z-index: 10;
+    transition: 0.2s;
+}
+
+.btn-revert:hover {
+    transform: translateY(-50%) scale(1.1);
+    background: #fff;
+}
+
+/* Update popup button styles */
+.btn-select-part.selected {
+    background: var(--brand-generic); /* Dark Grey/Blue */
+    color: #ccc;
+    border: 1px solid #555;
+    cursor: default;
+}
+.btn-select-part.is-current {
+    background: var(--error); /* Red for currently active part to allow deselect/revert logic */
+    color: white;
+    cursor: pointer;
+}
+.btn-select-part.revert-target {
+    background: var(--highlight); /* Orange for Original part */
+    color: white;
+}
+
         header h1 {
             font-size: 2.5em;
             background: linear-gradient(90deg, #3498db, #2ecc71);
@@ -761,6 +807,8 @@
             border-left: 4px solid #555;
             position: relative;
             --row-color: #fff;
+    padding-left: 45px; /* Make room for the revert button on the left */
+
         }
 
         .part-row.brand-amd { border-left-color: var(--brand-amd); --row-color: var(--brand-amd); }
@@ -1907,57 +1955,70 @@ if (selectedOptions.ramNames.size > 0) {
 }
 
     function getBuildsFromSQL(sortKey, limit, offset = 0) {
-        if(!sqlDB) return [];
+    if(!sqlDB) return [];
+    
+    let orderBy = 'ABS(diff) ASC'; 
+    
+    if (sortKey === 'score_desc') orderBy = 'score DESC';
+    else if (sortKey === 'score_asc') orderBy = 'score ASC';
+    else if (sortKey === 'price_asc') orderBy = 'price ASC';
+    else if (sortKey === 'price_desc') orderBy = 'price DESC';
+    else if (sortKey === 'gpu_score') orderBy = 'gpuScore DESC';
+    else if (sortKey === 'cpu_score') orderBy = 'liveCpuScore DESC';
+    else if (sortKey === 'value_desc') orderBy = '(score * 1.0 / price) DESC';
+    else if (sortKey === 'value_asc') orderBy = '(score * 1.0 / price) ASC';
+    
+    const stmt = sqlDB.prepare(`
+        SELECT * FROM builds 
+        ORDER BY ${orderBy}
+        LIMIT $limit OFFSET $offset
+    `);
+    
+    stmt.bind({$limit: limit, $offset: offset});
+    
+    const output = [];
+    while(stmt.step()) {
+        const row = stmt.getAsObject();
+        const storageNames = JSON.parse(row.storageNames || '[]');
         
-        let orderBy = 'ABS(diff) ASC'; 
-        
-        if (sortKey === 'score_desc') orderBy = 'score DESC';
-        else if (sortKey === 'score_asc') orderBy = 'score ASC';
-        else if (sortKey === 'price_asc') orderBy = 'price ASC';
-        else if (sortKey === 'price_desc') orderBy = 'price DESC';
-        else if (sortKey === 'gpu_score') orderBy = 'gpuScore DESC';
-        else if (sortKey === 'cpu_score') orderBy = 'liveCpuScore DESC';
-        else if (sortKey === 'value_desc') orderBy = '(score * 1.0 / price) DESC';
-        else if (sortKey === 'value_asc') orderBy = '(score * 1.0 / price) ASC';
-        
-        const stmt = sqlDB.prepare(`
-            SELECT * FROM builds 
-            ORDER BY ${orderBy}
-            LIMIT $limit OFFSET $offset
-        `);
-        
-        stmt.bind({$limit: limit, $offset: offset});
-        
-        const output = [];
-        while(stmt.step()) {
-            const row = stmt.getAsObject();
-            
-            // Reconstruct Object
-            const storageNames = JSON.parse(row.storageNames || '[]');
-            
-            output.push({
-                score: row.score,
-                liveCpuScore: row.liveCpuScore,
-                gpuScore: row.gpuScore,
-                diff: row.diff,
-                price: row.price,
-                watts: row.watts,
-                cpu: DB.cpu.get(row.cpuName),
-                gpu: DB.gpu.get(row.gpuName),
-                gpuCnt: row.gpuCnt,
-                ram: row.ramName ? DB.ram.get(row.ramName) : null,
-                ramSticks: row.ramSticks,
-                mobo: row.moboName ? DB.mobo.get(row.moboName) : null,
-                case: row.caseName ? DB.cases.get(row.caseName) : null,
-                cooler: row.coolerName ? DB.cooler.get(row.coolerName) : null,
-                psu: row.psuName ? DB.psu.get(row.psuName) : null,
-                fan: row.fanName ? DB.fan.get(row.fanName) : null,
-                storages: storageNames.map(n => DB.storage.get(n)).filter(Boolean)
-            });
-        }
-        stmt.free();
-        return output;
+        // Construct the build object
+        const buildObj = {
+            score: row.score,
+            liveCpuScore: row.liveCpuScore,
+            gpuScore: row.gpuScore,
+            diff: row.diff,
+            price: row.price,
+            watts: row.watts,
+            cpu: DB.cpu.get(row.cpuName),
+            gpu: DB.gpu.get(row.gpuName),
+            gpuCnt: row.gpuCnt,
+            ram: row.ramName ? DB.ram.get(row.ramName) : null,
+            ramSticks: row.ramSticks,
+            mobo: row.moboName ? DB.mobo.get(row.moboName) : null,
+            case: row.caseName ? DB.cases.get(row.caseName) : null,
+            cooler: row.coolerName ? DB.cooler.get(row.coolerName) : null,
+            psu: row.psuName ? DB.psu.get(row.psuName) : null,
+            fan: row.fanName ? DB.fan.get(row.fanName) : null,
+            storages: storageNames.map(n => DB.storage.get(n)).filter(Boolean)
+        };
+
+        // NEW: Store a snapshot of the original parts to track changes
+        buildObj.original = {
+            ram: buildObj.ram,
+            mobo: buildObj.mobo,
+            case: buildObj.case,
+            cooler: buildObj.cooler,
+            psu: buildObj.psu,
+            fan: buildObj.fan,
+            // Storage is an array, shallow copy it
+            storages: [...buildObj.storages]
+        };
+
+        output.push(buildObj);
     }
+    stmt.free();
+    return output;
+}
 
     // ==========================================
     // DATA FETCHING
@@ -3560,10 +3621,36 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
     document.getElementById('btnNext').disabled = (page === totalPages || totalPages === 0);
 }
 
-    function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-generic') {
+function renderInteractive(label, part, bIdx, type, specs, colorClass = 'brand-generic') {
+    const build = builds[bIdx];
     let price = part.price;
+    let revertBtn = '';
+
+    // Check if we need a Revert Button
+    let isChanged = false;
+
+    if (type === 'storage') {
+        // Complex check for storage arrays
+        const origNames = build.original.storages.map(s => s.name).sort().join(',');
+        const currNames = build.storages.map(s => s.name).sort().join(',');
+        if (origNames !== currNames) isChanged = true;
+    } else {
+        // Simple name check for single parts
+        if (build.original[type] && build.original[type].name !== part.name) {
+            isChanged = true;
+        } else if (!build.original[type] && part) {
+            // Part was added where there was none
+            isChanged = true;
+        }
+    }
+
+    if (isChanged) {
+        revertBtn = `<button class="btn-revert" onclick="revertPart(${bIdx}, '${type}', event)" title="Revert to original">↺</button>`;
+    }
+
     return `
     <div class="part-row interactive ${colorClass} text-colored" onclick="openSwapPopup('${type}', ${bIdx})">
+        ${revertBtn}
         <button class="btn-change">${type === 'storage' ? 'Manage' : 'Change'}</button>
         <div class="part-header">
             <span class="part-label">${label}</span>
@@ -3574,6 +3661,55 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
     </div>`;
 }
 
+function revertPart(buildIdx, type, event) {
+    if(event) event.stopPropagation(); // Prevent opening the popup
+    
+    const build = builds[buildIdx];
+    
+    // 1. Restore Logic
+    if (type === 'storage') {
+        build.storages = [...build.original.storages]; // Restore array copy
+    } else {
+        const originalPart = build.original[type];
+        if (!originalPart) return; // Safety
+        
+        build[type] = originalPart;
+
+        // If restoring RAM, Recalc Scores
+        if (type === 'ram') {
+             const newCpuScore = calculateCpuScore(
+                build.cpu, originalPart, build.ramSticks,
+                currentMode, globalUseOC, globalUseXMP
+            );
+            build.liveCpuScore = newCpuScore;
+            build.score = calculate3DMark(newCpuScore, build.gpuScore);
+            
+            const targetScore = parseInt(document.getElementById('targetScore').value.replace(/,/g, '')) || 20000;
+            build.diff = build.score - targetScore;
+        }
+    }
+
+    // 2. Recalculate Total Price
+    // Start with base components
+    let newPrice = build.cpu.price + (build.gpu.price * build.gpuCnt);
+    
+    if (build.ram) newPrice += (build.ram.price * build.ramSticks);
+    if (build.mobo) newPrice += build.mobo.price;
+    if (build.case) newPrice += build.case.price;
+    if (build.cooler) newPrice += build.cooler.price;
+    if (build.psu) newPrice += build.psu.price;
+    if (build.fan) newPrice += build.fan.price;
+    
+    // Add Storage Price
+    if (build.storages) {
+        build.storages.forEach(s => newPrice += s.price);
+    }
+    
+    build.price = newPrice;
+
+    // 3. Render
+    renderPage(currentPage, true);
+}
 
     function changePage(d) {
         const total = getTotalBuilds();
@@ -3639,103 +3775,163 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
     }
 
     function refreshPopup() {
-        if (!currentPopupData) return;
-        const { type, buildIdx, originalPart } = currentPopupData;
-        const build = builds[buildIdx];
-        const fitOnly = document.getElementById('popupFit').checked;
-        const sortMode = document.getElementById('popupSort').value;
-        const searchVal = document.getElementById('popupSearch').value.toLowerCase();
+    // 1. Safety Checks
+    if (!currentPopupData) return;
+    const { type, buildIdx } = currentPopupData;
+    const build = builds[buildIdx];
+    
+    // 2. Get Filter Inputs
+    const fitOnly = document.getElementById('popupFit').checked;
+    const sortMode = document.getElementById('popupSort').value;
+    const searchVal = document.getElementById('popupSearch').value.toLowerCase();
+    
+    const tbody = document.getElementById('popupTableBody');
+    tbody.innerHTML = '';
+
+    // 3. Get Candidates from Database
+    let candidates = Array.from(DB[type].values());
+
+    // 4. Apply Filters
+    if (fitOnly) {
+        candidates = candidates.filter(part => checkFit(type, part, build));
+    }
+
+    if (searchVal) {
+        candidates = candidates.filter(part => part.name.toLowerCase().includes(searchVal));
+    }
+
+    // 5. Apply Sorting
+    candidates.sort((a,b) => {
+        if (sortMode === 'price_asc') return a.price - b.price;
+        if (sortMode === 'price_desc') return b.price - a.price;
         
-        const tbody = document.getElementById('popupTableBody');
-        tbody.innerHTML = '';
+        let valA = 0;
+        let valB = 0;
+        
+        // Define "Performance" metric based on type
+        if (type === 'cases') { valA = a.maxGpuLen; valB = b.maxGpuLen; } 
+        else if (type === 'cooler' || type === 'fan') { valA = a.flow || 0; valB = b.flow || 0; }
+        else if (type === 'storage') { valA = a.speed || 0; valB = b.speed || 0; }
+        else if (type === 'ram') { valA = a.freq || 0; valB = b.freq || 0; }
+        else if (type === 'psu') { valA = a.watts || 0; valB = b.watts || 0; }
+        
+        if (sortMode === 'perf_desc') return valB - valA;
 
-        let candidates = Array.from(DB[type].values());
+        // Value Sorting (Performance / Price)
+        let scoreA = (valA / (a.price || 1));
+        let scoreB = (valB / (b.price || 1));
+        
+        if (sortMode === 'val_desc') return scoreB - scoreA; 
+        if (sortMode === 'val_asc') return scoreA - scoreB; 
+        
+        return 0;
+    });
 
-        if (fitOnly) {
-            candidates = candidates.filter(part => checkFit(type, part, build));
-        }
+    // 6. Identification (What is currently selected? What was original?)
+    // Note: 'storage' is an array, handled separately inside the loop
+    const currentPartName = (type !== 'storage' && build[type]) ? build[type].name : null;
+    const originalPartName = (type !== 'storage' && build.original && build.original[type]) ? build.original[type].name : null;
 
-        if (searchVal) {
-            candidates = candidates.filter(part => part.name.toLowerCase().includes(searchVal));
-        }
+    // 7. Render Loop (Limit to 100 to prevent lag)
+    const subset = candidates.slice(0, 100);
 
-        candidates.sort((a,b) => {
-            if (sortMode === 'price_asc') return a.price - b.price;
-            if (sortMode === 'price_desc') return b.price - a.price;
+    subset.forEach((p, idx) => {
+        // Compare price against the CURRENTLY selected part for the diff calculation
+        let currentPrice = 0;
+        if (type === 'storage') currentPrice = 0; // Storage diffs are absolute per item
+        else if (build[type]) currentPrice = build[type].price;
+
+        let newPrice = p.price;
+        let actionBtn = "";
+        let diffStr = "";
+        let diffClass = "";
+
+        // Escape quotes for onclick handlers
+        const safeName = p.name.replace(/'/g, "\\'");
+
+        // --- BRANCH A: STORAGE LOGIC ---
+        if (type === 'storage') {
+            const currentDrives = build.storages || [];
+            const isSelected = currentDrives.some(d => d.name === p.name);
+            const count = currentDrives.filter(d => d.name === p.name).length;
             
-            let valA = 0;
-            let valB = 0;
-            if (type === 'cases') { valA = a.maxGpuLen; valB = b.maxGpuLen; } 
-            else if (type === 'cooler' || type === 'fan') { valA = a.flow || 0; valB = b.flow || 0; }
-            else if (type === 'storage') { valA = a.speed || 0; valB = b.speed || 0; }
-            
-            if (sortMode === 'perf_desc') return valB - valA;
+            // Slot Logic
+            const isSSD = (p.type === 'SSD' || p.type === 'M.2');
+            const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
+            const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
+            const slotsFull = currentSameType.length >= slotCount;
 
-            let scoreA = (valA / (a.price || 1));
-            let scoreB = (valB / (b.price || 1));
-            if (sortMode === 'val_desc') return scoreB - scoreA; 
-            if (sortMode === 'val_asc') return scoreA - scoreB; 
-            
-            return 0;
-        });
-
-        const subset = candidates.slice(0, 100);
-
-        subset.forEach((p, idx) => {
-            let origPrice = originalPart ? originalPart.price : 0;
-            let newPrice = p.price;
-            let actionBtn = "";
-            let diffStr = "";
-            let diffClass = "";
-
-            if (type === 'storage') {
-                const currentDrives = build.storages || [];
-                const isSelected = currentDrives.some(d => d.name === p.name);
-                const isSSD = (p.type === 'SSD' || p.type === 'M.2');
-                const currentSameType = currentDrives.filter(d => (d.type === 'SSD' || d.type === 'M.2') === isSSD);
-                const slotCount = isSSD ? build.case.ssdSlots : build.case.hddSlots;
-                const slotsFull = currentSameType.length >= slotCount;
-                const safeName = p.name.replace(/'/g, "\\'");
-
-                if (isSelected) {
-                    const count = currentDrives.filter(d => d.name === p.name).length;
-                    // Note the backticks ` ` surrounding the HTML
-                    actionBtn = `
-                        <button class="btn-select-part selected" onclick="toggleStorage('${safeName}', -1)">REMOVE (Has ${count})</button>
-                        ${!slotsFull ? `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>` : ''}
-                    `;
-                } else if (slotsFull) {
-                    actionBtn = `<button class="btn-select-part" disabled title="No Slots Available">FULL</button>`;
-                } else {
-                    actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>`;
-                }
-                diffStr = formatCurrency(p.price);
-
+            // Generate Buttons
+            if (isSelected) {
+                // It is selected, show Remove button (Red)
+                // If slots aren't full, also show a small '+' button
+                let addBtn = !slotsFull 
+                    ? `<button class="btn-select-part" style="padding: 8px 12px; margin-left:5px;" onclick="toggleStorage('${safeName}', 1)">+</button>` 
+                    : '';
+                
+                actionBtn = `
+                    <div style="display:flex; align-items:center;">
+                        <button class="btn-select-part is-current" onclick="toggleStorage('${safeName}', -1)">REMOVE (${count})</button>
+                        ${addBtn}
+                    </div>
+                `;
+            } else if (slotsFull) {
+                actionBtn = `<button class="btn-select-part" disabled style="background:#444; color:#888;">FULL</button>`;
             } else {
-                const diff = newPrice - origPrice;
-                diffStr = diff > 0 ? `+${formatCurrency(diff)}` : (diff < 0 ? `-${formatCurrency(Math.abs(diff))}` : '$0.00');
-                diffClass = diff > 0 ? 'val-neg' : (diff < 0 ? 'val-pos' : '');
-                const safeName = p.name.replace(/'/g, "\\'");
+                actionBtn = `<button class="btn-select-part" onclick="toggleStorage('${safeName}', 1)">ADD</button>`;
+            }
+            
+            // Storage price diff is just the price of the drive (since we are adding)
+            diffStr = formatCurrency(p.price);
+
+        } 
+        // --- BRANCH B: STANDARD PART LOGIC ---
+        else {
+            // Price Diff vs Current
+            const diff = newPrice - currentPrice;
+            diffStr = diff > 0 ? `+${formatCurrency(diff)}` : (diff < 0 ? `-${formatCurrency(Math.abs(diff))}` : '$0.00');
+            diffClass = diff > 0 ? 'val-neg' : (diff < 0 ? 'val-pos' : '');
+
+            if (p.name === currentPartName) {
+                // This part is currently on the build
+                if (p.name !== originalPartName) {
+                    // It's a changed part. Allow user to "Revert" via clicking this or the separate revert button.
+                    actionBtn = `<button class="btn-select-part is-current" onclick="revertPart(${buildIdx}, '${type}'); closePopup();">CURRENT (REVERT)</button>`;
+                } else {
+                    // It's the original part AND currently selected.
+                    actionBtn = `<button class="btn-select-part selected">SELECTED</button>`;
+                }
+            } else if (p.name === originalPartName) {
+                // This is the original part, but it is NOT currently selected.
+                actionBtn = `<button class="btn-select-part revert-target" onclick="revertPart(${buildIdx}, '${type}'); closePopup();">REVERT TO THIS</button>`;
+            } else {
+                // Standard unselected part.
                 actionBtn = `<button class="btn-select-part" onclick="selectReplacementPart('${safeName}')">SELECT</button>`;
             }
+        }
 
-            let details = '';
-            if (type === 'cases') details = `Max GPU: ${p.maxGpuLen}mm | Size: ${p.size} | GPU Slots: ${p.gpuSlots}`;
-            if (type === 'cooler') details = `${p.type} | Flow: ${p.flow}`;
-            if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow} CFM`;
-            if (type === 'storage') details = `${p.sizeStr} | ${p.type} | Level ${p.level} | ${p.speed} MB/s`;
+        // 8. Generate Details String
+        let details = '';
+        if (type === 'cases') details = `Max GPU: ${p.maxGpuLen}mm | Size: ${p.size} | GPU Slots: ${p.gpuSlots}`;
+        else if (type === 'cooler') details = `${p.type} | Flow: ${p.flow}`;
+        else if (type === 'fan') details = `Size: ${p.size}mm | Flow: ${p.flow} CFM`;
+        else if (type === 'storage') details = `${p.sizeStr} | ${p.type} | Level ${p.level} | ${p.speed} MB/s`;
+        else if (type === 'ram') details = `${p.freq} MHz | ${p.type} | ${p.size}GB | ${p.mfgr}`;
+        else if (type === 'mobo') details = `${p.socket} | ${p.size} | ${p.ramType}`;
+        else if (type === 'psu') details = `${p.watts}W | ${p.length}mm`;
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${actionBtn}</td>
-                <td style="font-weight:bold; color:#fff;">${p.name}</td>
-                <td style="font-size:0.9em; color:#aaa;">${details}</td>
-                <td class="price-red-cell">${formatCurrency(newPrice)}</td>
-                <td class="${diffClass}">${diffStr}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
+        // 9. Append Row
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${actionBtn}</td>
+            <td style="font-weight:bold; color:#fff;">${p.name}</td>
+            <td style="font-size:0.9em; color:#aaa;">${details}</td>
+            <td class="price-red-cell">${formatCurrency(newPrice)}</td>
+            <td class="${diffClass}">${diffStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
 
     window.toggleStorage = function(partName, delta) {
     if (!currentPopupData || currentPopupData.type !== 'storage') return;
