@@ -3140,8 +3140,7 @@ function runScanChunk(cpuIndex, config, lists) {
         if ((cpu.price + gpuConf.price) > config.budget) continue;
 
         // 3. STICKS LOOP
-        const possibleSticks = config.reqSticks > 0 ? [config.reqSticks] : [1, 2, 3, 4];
-
+        const possibleSticks = config.reqSticks > 0 ? [config.reqSticks] : [1, 2, 4];
 
         for (const sticks of possibleSticks) {
             
@@ -3440,33 +3439,35 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
                 `;
             }
 
-            let ramHTML = '';
-            if (b.ram) {
-                // --- UPDATED: Detailed RAM Specs ---
-                ramHTML = `
-                <div class="part-row brand-ram text-colored">
-                    <div class="part-header">
-                        <span class="part-label">RAM</span>
-                        <span class="part-price">${formatCurrency(b.ram.price * b.ramSticks)}</span>
-                    </div>
-                    <div class="part-name">${b.ramSticks}x ${b.ram.name}</div>
-                    <div class="part-specs">${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB</div>
-                </div>`;
+
+let ramHTML = '';
+if (b.ram) {
+    ramHTML = renderInteractive('RAM', 
+        b.ram, 
+        buildIdx, 
+        'ram', 
+        `${b.ramSticks}x | ${b.ram.freq} MHz | ${b.ram.type} | Size Each: ${b.ram.size}GB | Total: ${b.ram.size * b.ramSticks}GB`
+    );
+}
             }
 
             let auxHTML = '';
-            if (b.mobo) {
-                // --- UPDATED: Detailed Mobo Specs ---
-                auxHTML += `
-                <div class="part-row brand-aux text-colored">
-                    <div class="part-header">
-                        <span class="part-label">Motherboard</span>
-                        <span class="part-price">${formatCurrency(b.mobo.price)}</span>
-                    </div>
-                    <div class="part-name">${b.mobo.name}</div>
-                    <div class="part-specs">${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}</div>
-                </div>`;
-            }
+if (b.mobo) {
+    auxHTML += renderInteractive('Motherboard',
+        b.mobo,
+        buildIdx,
+        'mobo',
+        `${b.mobo.socket} | ${b.mobo.ramType} | ${b.mobo.size} Form Factor | PCI Slots: ${b.mobo.pciSlots}`
+    );
+}
+if (b.psu) {
+    auxHTML += renderInteractive('PSU',
+        b.psu,
+        buildIdx,
+        'psu',
+        `${b.psu.watts}W | Length: ${b.psu.length}mm`
+    );
+}
             if (b.psu) {
                 auxHTML += `
                 <div class="part-row brand-aux text-colored">
@@ -3618,26 +3619,30 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
     }
 
     function openSwapPopup(type, buildIdx) {
-        const build = builds[buildIdx];
-        
-        let original = null;
-        if (type === 'fan') original = build.fan;
-        else if (type === 'cases') original = build.case;
-        else if (type === 'cooler') original = build.cooler;
-        else if (type === 'storage') original = null; 
+    const build = builds[buildIdx];
+    
+    let original = null;
+    if (type === 'fan') original = build.fan;
+    else if (type === 'cases') original = build.case;
+    else if (type === 'cooler') original = build.cooler;
+    else if (type === 'mobo') original = build.mobo;          // NEW
+    else if (type === 'ram') original = build.ram;            // NEW
+    else if (type === 'psu') original = build.psu;            // NEW
+    else if (type === 'storage') original = null; 
 
-        currentPopupData = {
-            type,
-            buildIdx, 
-            originalPart: original
-        };
+    currentPopupData = {
+        type,
+        buildIdx, 
+        originalPart: original,
+        originalSticks: type === 'ram' ? build.ramSticks : null  // NEW - Store RAM stick count
+    };
 
-        document.getElementById('popupSearch').value = "";
-        document.getElementById('popupTitle').innerText = `Swap ${type.toUpperCase()}`;
-        document.getElementById('popupOverlay').style.display = 'block';
-        document.getElementById('popupContainer').style.display = 'flex';
-        refreshPopup();
-    }
+    document.getElementById('popupSearch').value = "";
+    document.getElementById('popupTitle').innerText = `Swap ${type.toUpperCase()}`;
+    document.getElementById('popupOverlay').style.display = 'block';
+    document.getElementById('popupContainer').style.display = 'flex';
+    refreshPopup();
+}
 
     function closePopup() {
         document.getElementById('popupOverlay').style.display = 'none';
@@ -3809,12 +3814,42 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
             return true;
         }
 
-        if (type === 'fan') {
+if (type === 'fan') {
             if (!build.case) return true;
             const s120 = build.case.radSizes.includes('120');
             const s140 = build.case.radSizes.includes('140');
             if (part.size === 120 && !s120) return false;
             if (part.size === 140 && !s140) return false;
+            return true;
+        }
+
+        // NEW: Motherboard compatibility checks
+        if (type === 'mobo') {
+            if (part.socket !== build.cpu.socket) return false;
+            if (build.ram && part.ramType !== build.ram.type) return false;
+            if (build.gpuCnt > 1 && part.pciSlots < 5) return false;
+            if (build.gpuCnt > 1) {
+                const sliType = build.gpu.sliType;
+                if (sliType === 'SLI' && !part.supportSLI) return false;
+                if (sliType === 'Crossfire' && !part.supportCF) return false;
+            }
+            if (build.case && !build.case.moboSizes.includes(part.size)) return false;
+            if (build.ramSticks === 4 && part.size === 'Mini-ITX') return false;
+            return true;
+        }
+
+        // NEW: RAM compatibility checks
+        if (type === 'ram') {
+            if (build.mobo && part.type !== build.mobo.ramType) return false;
+            if (!build.cpu.memTypes.includes(part.type)) return false;
+            return true;
+        }
+
+        // NEW: PSU compatibility checks
+        if (type === 'psu') {
+            const totalWatts = build.watts; // Build already has total watts calculated
+            if (part.watts < totalWatts) return false;
+            if (build.case && build.case.maxPsuLen > 0 && part.length > build.case.maxPsuLen) return false;
             return true;
         }
 
