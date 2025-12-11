@@ -3231,7 +3231,7 @@ function runScanChunk(cpuIndex, config, lists) {
     );
 
     // 2. GPU LOOP
-    for (const gpuConf of lists.validGpu) {
+    for (const gpuConf of lists.precalcGpuConfigs) {
         if (cpu.price + gpuConf.price > config.budget) continue;
 
         // 3. STICKS LOOP
@@ -3252,6 +3252,7 @@ function runScanChunk(cpuIndex, config, lists) {
                     );
 
                     const totalScore = calculate3DMark(liveCpuScore, gpuConf.score * lists.gpuCnt);
+
 
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
                         continue;
