@@ -3158,14 +3158,10 @@ function calculate3DMark(cpuScore, gpuScore) {
         runScanChunk(0, config, lists);
     }
 
-
-
-
-// Global bayrak - dosyanın üstüne ekle (diğer global değişkenlerin yanına)
-let activeScanTransaction = false;
+let activeScanTransaction = false; // globals'ta
 
 function runScanChunk(cpuIndex, config, lists) {
-    // Tüm CPU'lar bitti veya liste boş -> transaction SADECE açıldıysa kapat
+    // CPU listesi bitti veya boş
     if (cpuIndex >= lists.validCpu.length) {
         if (sqlDB && activeScanTransaction) {
             try {
@@ -3185,7 +3181,7 @@ function runScanChunk(cpuIndex, config, lists) {
         return;
     }
 
-    // Transaction SADECE ilk chunk'ta ve sadece bir kez başlat
+    // Transaction sadece ilk CPU’da başlasın
     if (cpuIndex === 0 && !activeScanTransaction) {
         try {
             sqlDB.run('BEGIN TRANSACTION');
@@ -3198,7 +3194,7 @@ function runScanChunk(cpuIndex, config, lists) {
 
     const cpu = lists.validCpu[cpuIndex];
 
-    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
+    // 1) RAM havuzu
     const availableRams = Array.from(DB.ram.values).filter(r =>
         r.level <= config.lvl &&
         (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
@@ -3221,7 +3217,7 @@ function runScanChunk(cpuIndex, config, lists) {
         uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
     }
 
-    // SQL INSERT statement
+    // SQL INSERT
     const stmt = sqlDB.prepare(
         'INSERT OR REPLACE INTO builds ' +
         '(score, liveCpuScore, gpuScore, diff, price, watts, ' +
@@ -3230,18 +3226,18 @@ function runScanChunk(cpuIndex, config, lists) {
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
-    // 2. GPU LOOP
+    // 2) GPU LOOP – BURASI ÖNEMLİ: precalcGpuConfigs
     for (const gpuConf of lists.precalcGpuConfigs) {
         if (cpu.price + gpuConf.price > config.budget) continue;
 
-        // 3. STICKS LOOP
+        // 3) RAM stick sayısı
         const possibleSticks = config.reqSticks === 0 ? [1, 2, 4] : [config.reqSticks];
 
         for (const sticks of possibleSticks) {
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
 
-            // PERFORMANCE MODE ON
             if (globalPerfMode) {
+                // PERFORMANCE MODE ON
                 let foundWorkingSpec = false;
 
                 for (const freq of freqsToTest) {
@@ -3251,8 +3247,10 @@ function runScanChunk(cpuIndex, config, lists) {
                         cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
                     );
 
-                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score * lists.gpuCnt);
-
+                    const totalScore = calculate3DMark(
+                        liveCpuScore,
+                        gpuConf.score * lists.gpuCnt
+                    );
 
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
                         continue;
@@ -3298,7 +3296,10 @@ function runScanChunk(cpuIndex, config, lists) {
                         cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
                     );
 
-                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score * lists.gpuCnt);
+                    const totalScore = calculate3DMark(
+                        liveCpuScore,
+                        gpuConf.score * lists.gpuCnt
+                    );
 
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
                         continue;
@@ -3307,9 +3308,7 @@ function runScanChunk(cpuIndex, config, lists) {
                     validFreqCandidates.push([freq, totalScore, liveCpuScore]);
                 }
 
-                for (const candidate of validFreqCandidates) {
-                    const [freq, totalScore, liveCpuScore] = candidate;
-
+                for (const [freq, totalScore, liveCpuScore] of validFreqCandidates) {
                     const validRams = availableRams
                         .filter(r =>
                             r.freq === freq &&
@@ -3351,6 +3350,8 @@ function runScanChunk(cpuIndex, config, lists) {
 
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
+
+
 
 function finishScan(config) {
     deduplicateBuilds();
