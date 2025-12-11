@@ -3160,10 +3160,14 @@ function calculate3DMark(cpuScore, gpuScore) {
 
 
 
+
+// Global bayrak - dosyanın üstüne ekle (diğer global değişkenlerin yanına)
+let activeScanTransaction = false;
+
 function runScanChunk(cpuIndex, config, lists) {
-    // Tüm CPU'lar bitti -> önce transaction'ı kapat, sonra finishScan
+    // Tüm CPU'lar bitti veya liste boş -> transaction SADECE açıldıysa kapat
     if (cpuIndex >= lists.validCpu.length) {
-        if (sqlDB) {
+        if (sqlDB && activeScanTransaction) {
             try {
                 sqlDB.run('COMMIT');
                 sqlDB.run('END TRANSACTION');
@@ -3175,15 +3179,18 @@ function runScanChunk(cpuIndex, config, lists) {
                     console.error('Rollback da başarısız:', e2);
                 }
             }
+            activeScanTransaction = false;
         }
         finishScan(config);
         return;
     }
 
-    // Transaction SADECE ilk chunk'ta başlat
-    if (cpuIndex === 0) {
+    // Transaction SADECE ilk chunk'ta ve sadece bir kez başlat
+    if (cpuIndex === 0 && !activeScanTransaction) {
         try {
             sqlDB.run('BEGIN TRANSACTION');
+            activeScanTransaction = true;
+            console.log('Transaction başlatıldı');
         } catch (e) {
             console.error('Transaction başlatma hatası', e);
         }
@@ -3191,7 +3198,7 @@ function runScanChunk(cpuIndex, config, lists) {
 
     const cpu = lists.validCpu[cpuIndex];
 
-    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES – TÜM RAM FREKANSLARI
+    // 1. PRE-CALCULATE ALL UNIQUE FREQUENCIES
     const availableRams = Array.from(DB.ram.values).filter(r =>
         r.level <= config.lvl &&
         (selectedOptions.ramNames.size === 0 || selectedOptions.ramNames.has(r.name)) &&
@@ -3214,7 +3221,7 @@ function runScanChunk(cpuIndex, config, lists) {
         uniqueDefaultSpeeds.push(cpu.defaultMem || 2133);
     }
 
-    // SQL INSERT statement hazırla
+    // SQL INSERT statement
     const stmt = sqlDB.prepare(
         'INSERT OR REPLACE INTO builds ' +
         '(score, liveCpuScore, gpuScore, diff, price, watts, ' +
@@ -3224,7 +3231,7 @@ function runScanChunk(cpuIndex, config, lists) {
     );
 
     // 2. GPU LOOP
-    for (const gpuConf of precalcGpuConfigs) {
+    for (const gpuConf of lists.validGpu) {
         if (cpu.price + gpuConf.price > config.budget) continue;
 
         // 3. STICKS LOOP
@@ -3233,7 +3240,7 @@ function runScanChunk(cpuIndex, config, lists) {
         for (const sticks of possibleSticks) {
             const freqsToTest = config.useXMP ? uniqueXmpFreqs : uniqueDefaultSpeeds;
 
-            // PERFORMANCE MODE ON – ilk çalışan frekansı kullan
+            // PERFORMANCE MODE ON
             if (globalPerfMode) {
                 let foundWorkingSpec = false;
 
@@ -3241,16 +3248,10 @@ function runScanChunk(cpuIndex, config, lists) {
                     if (foundWorkingSpec) break;
 
                     const liveCpuScore = calculateCpuScore(
-                        cpu,
-                        freq,
-                        sticks,
-                        config.currentMode,
-                        config.useOC,
-                        config.useXMP,
-                        0
+                        cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
                     );
 
-                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score * lists.gpuCnt);
 
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
                         continue;
@@ -3271,7 +3272,7 @@ function runScanChunk(cpuIndex, config, lists) {
                     const validMobos = cpuMobos?.filter(m => {
                         if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
-                        if (gpuConf.count > 1 && m.pciSlots < 5) return false;
+                        if (lists.gpuCnt > 1 && m.pciSlots < 5) return false;
                         if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
                         if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
@@ -3282,36 +3283,21 @@ function runScanChunk(cpuIndex, config, lists) {
 
                     if (validMobos.length === 0 && config.useMobo) continue;
 
-                    // TÜM VALID RAM’leri SINIRSIZ kullan
                     assembleBuilds(
-                        validRams,
-                        validMobos,
-                        cpu,
-                        gpuConf,
-                        sticks,
-                        totalScore,
-                        liveCpuScore,
-                        config,
-                        lists,
-                        stmt
+                        validRams, validMobos, cpu, gpuConf, sticks,
+                        totalScore, liveCpuScore, config, lists, stmt
                     );
                 }
             } else {
-                // PERFORMANCE MODE OFF – tüm valid frekansları dene
+                // PERFORMANCE MODE OFF
                 const validFreqCandidates = [];
 
                 for (const freq of freqsToTest) {
                     const liveCpuScore = calculateCpuScore(
-                        cpu,
-                        freq,
-                        sticks,
-                        config.currentMode,
-                        config.useOC,
-                        config.useXMP,
-                        0
+                        cpu, freq, sticks, config.currentMode, config.useOC, config.useXMP, 0
                     );
 
-                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score);
+                    const totalScore = calculate3DMark(liveCpuScore, gpuConf.score * lists.gpuCnt);
 
                     if (totalScore < config.minGenScore || totalScore > config.maxGenScore) {
                         continue;
@@ -3336,7 +3322,7 @@ function runScanChunk(cpuIndex, config, lists) {
                     const validMobos = cpuMobos?.filter(m => {
                         if (!m) return true;
                         if (validRams[0].type !== m.ramType) return false;
-                        if (gpuConf.count > 1 && m.pciSlots < 5) return false;
+                        if (lists.gpuCnt > 1 && m.pciSlots < 5) return false;
                         if (gpuConf.sliType === 'SLI' && !m.supportSLI) return false;
                         if (gpuConf.sliType === 'Crossfire' && !m.supportCF) return false;
                         if (sticks === 4 && m.size === 'Mini-ITX') return false;
@@ -3347,18 +3333,9 @@ function runScanChunk(cpuIndex, config, lists) {
 
                     if (validMobos.length === 0 && config.useMobo) continue;
 
-                    // TÜM VALID RAM’leri SINIRSIZ kullan
                     assembleBuilds(
-                        validRams,
-                        validMobos,
-                        cpu,
-                        gpuConf,
-                        sticks,
-                        totalScore,
-                        liveCpuScore,
-                        config,
-                        lists,
-                        stmt
+                        validRams, validMobos, cpu, gpuConf, sticks,
+                        totalScore, liveCpuScore, config, lists, stmt
                     );
                 }
             }
@@ -3369,10 +3346,42 @@ function runScanChunk(cpuIndex, config, lists) {
 
     const percent = Math.floor(((cpuIndex + 1) / lists.validCpu.length) * 100);
     document.getElementById('resCount').innerText =
-        percent + '% ' + formatNumber(buildCount) + ' builds';
+        percent + '% | ' + formatNumber(buildCount) + ' builds';
 
     setTimeout(() => runScanChunk(cpuIndex + 1, config, lists), 0);
 }
+
+function finishScan(config) {
+    deduplicateBuilds();
+
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = false;
+    btn.innerText = 'GENERATE BUILDS';
+
+    const total = getTotalBuilds();
+    const { min, max } = getScoreRange();
+
+    document.getElementById('resCount').innerText = formatNumber(total) + ' Builds Found';
+    document.getElementById('scanStatus').innerText = 'Scan Complete.';
+
+    const scoreRangeDisplay = document.getElementById('scoreRangeDisplay');
+    scoreRangeDisplay.innerText = 'Lowest ' + formatNumber(min) + ' | Highest ' + formatNumber(max);
+
+    document.getElementById('pagination').style.display = total > 0 ? 'flex' : 'none';
+    renderPage(1);
+}
+
+function clearSQLite() {
+    if(sqlDB) {
+        sqlDB.run('DELETE FROM builds');
+        sqlDB.run('DELETE FROM sqlite_sequence WHERE name=\'builds\'');
+    }
+    buildCount = 0;
+    activeScanTransaction = false;
+}
+
+
+
 
 async function generateBuilds() {
         // Safety Checks
