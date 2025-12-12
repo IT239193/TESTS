@@ -1787,6 +1787,7 @@
 </div>
 
 
+
 <!-- UPGRADER VIEW -->
 <div id="upgraderView" style="display: none;">
     <div class="controls-wrapper active">
@@ -1810,14 +1811,14 @@
             
             <!-- Multi-GPU Selector -->
             <div class="input-group" id="upgGpuConfigBox">
-                <label>Allowed GPU Configs</label>
+                <label>Allowed Target Configs</label>
                 <div class="multi-select-container">
                     <div class="multi-select-display" id="upgGpuDisplay" onclick="document.getElementById('upgGpuOptions').classList.toggle('show')">
                         Single GPU
                     </div>
                     <div id="upgGpuOptions" class="multi-dropdown" style="padding: 10px; display: none; flex-direction: column; gap: 5px;">
                         <div class="checkbox-container">
-                            <input type="checkbox" id="chkGpu1" checked disabled>
+                            <input type="checkbox" id="chkGpu1" checked onchange="updateUpgDisplay()">
                             <label for="chkGpu1">Single (1x)</label>
                         </div>
                         <div class="checkbox-container">
@@ -1880,9 +1881,17 @@
                 <input type="hidden" id="upgCpuVal">
             </div>
 
-            <!-- Current GPU -->
+            <!-- Current GPU with Count Selector -->
             <div class="input-group" style="position:relative;">
-                <label>Current GPU</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="margin:0;">Current GPU</label>
+                    <select id="upgCurrentGpuCount" style="width:60px; height:24px; padding:0 5px; font-size:0.9em; background:#222; color:#fff; border:1px solid #555;">
+                        <option value="1">1x</option>
+                        <option value="2">2x</option>
+                        <option value="3">3x</option>
+                        <option value="4">4x</option>
+                    </select>
+                </div>
                 <input type="text" id="upgGpuSearch" placeholder="Search GPU..." oninput="filterSingleSearch('gpu', this)" onfocus="filterSingleSearch('gpu', this)">
                 <div class="search-dropdown-single" id="upgGpuList"></div>
                 <input type="hidden" id="upgGpuVal">
@@ -1898,26 +1907,26 @@
     </div>
     <div id="upgradeResultsList"></div>
 </div>
-    
+
+
     
 <script>
-
-
-    function updateUpgDisplay() {
+// Update Display Text for Checkboxes
+function updateUpgDisplay() {
+    const c1 = document.getElementById('chkGpu1').checked;
     const c2 = document.getElementById('chkGpu2').checked;
     const c3 = document.getElementById('chkGpu3').checked;
     const c4 = document.getElementById('chkGpu4').checked;
     
-    let text = "Single GPU";
-    let extras = [];
-    if (c2) extras.push("Dual");
-    if (c3) extras.push("Triple");
-    if (c4) extras.push("Quad");
+    let parts = [];
+    if (c1) parts.push("Single");
+    if (c2) parts.push("Dual");
+    if (c3) parts.push("Triple");
+    if (c4) parts.push("Quad");
     
-    if (extras.length > 0) {
-        text += " + " + extras.join("/");
-    }
-    document.getElementById('upgGpuDisplay').innerText = text;
+    const display = document.getElementById('upgGpuDisplay');
+    if (parts.length === 0) display.innerText = "Select Configs...";
+    else display.innerText = parts.join(" / ");
 }
 
 // Close the custom dropdown if clicked outside
@@ -2062,20 +2071,29 @@ function toggleUpgInputs() {
 }
 
 
-
-
-   // 2. Main Upgrade Function (Iterates through selected counts)
+// 2. Main Upgrade Function (Fully Updated)
 function findUpgrades() {
     const budget = parseFloat(document.getElementById('upgBudget').value) || 0;
     const userLevel = parseInt(document.getElementById('upgLevel').value) || 30;
     const targetType = document.getElementById('upgTargetType').value; 
     
-    // Determine allowed counts based on checkboxes
-    let allowedCounts = [1]; // Always allow single
+    // Get Current Setup details
+    const currGpuCount = parseInt(document.getElementById('upgCurrentGpuCount').value) || 1;
+
+    // Determine allowed TARGET counts based on checkboxes
+    let allowedCounts = []; 
     if (targetType === 'gpu') {
+        if (document.getElementById('chkGpu1').checked) allowedCounts.push(1);
         if (document.getElementById('chkGpu2').checked) allowedCounts.push(2);
         if (document.getElementById('chkGpu3').checked) allowedCounts.push(3);
         if (document.getElementById('chkGpu4').checked) allowedCounts.push(4);
+        
+        if (allowedCounts.length === 0) {
+            alert("Please select at least one Target GPU Configuration (Single, Dual, etc).");
+            return;
+        }
+    } else {
+        allowedCounts = [1]; // CPU upgrades don't use this logic
     }
 
     // Get Current System Parts
@@ -2107,14 +2125,27 @@ function findUpgrades() {
         return;
     }
 
-    // Determine Base Power
+    // --- CALCULATE BASELINE (CURRENT SYSTEM) ---
     const maxWatts = psu.watts;
     let baseWatts = 50; 
-    if (targetType === 'cpu') baseWatts += currGpu.watts; 
-    else baseWatts += currCpu.watts;
+    let currentScore = 0;
 
-    // Current Baseline Score
-    const currentScore = targetType === 'cpu' ? (currCpu ? currCpu.scoreTS : 0) : (currGpu ? currGpu.score : 0);
+    if (targetType === 'cpu') {
+        // Upgrading CPU: Base power is (Current GPU * Count) + Buffer
+        baseWatts += (currGpu.watts * currGpuCount);
+        currentScore = currCpu ? currCpu.scoreTS : 0;
+    } else {
+        // Upgrading GPU: Base power is Current CPU + Buffer
+        baseWatts += currCpu.watts;
+        
+        // Calculate Baseline GPU Score based on "Current GPU Count"
+        if (currGpu) {
+            if (currGpuCount === 1) currentScore = currGpu.score;
+            else if (currGpuCount === 2) currentScore = currGpu.score2 || 0;
+            else if (currGpuCount === 3) currentScore = currGpu.score3 || 0;
+            else if (currGpuCount === 4) currentScore = currGpu.score4 || 0;
+        }
+    }
 
     let upgrades = [];
     
@@ -2173,6 +2204,7 @@ function findUpgrades() {
                 else if (count === 3) totalScore = g.score3;
                 else if (count === 4) totalScore = g.score4;
 
+                // If score is 0 (unsupported config) or less than current baseline
                 if (!totalScore || totalScore <= currentScore) continue;
 
                 // 4. Budget Check
