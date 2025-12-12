@@ -1787,7 +1787,7 @@
 </div>
 
 
- <!-- UPGRADER VIEW -->
+<!-- UPGRADER VIEW -->
 <div id="upgraderView" style="display: none;">
     <div class="controls-wrapper active">
         <div class="section-header">1. Requirements & Goals</div>
@@ -1824,23 +1824,23 @@
         </p>
 
         <div class="upgrade-grid">
-            <!-- Motherboard (Required for Socket & SLI) -->
-            <div class="input-group" id="groupMobo" style="position:relative;">
+            <!-- Motherboard -->
+            <div class="input-group" id="groupMobo" style="position:relative; transition:0.3s;">
                 <label>Current Motherboard *</label>
                 <input type="text" id="upgMoboSearch" placeholder="Search Motherboard..." oninput="filterSingleSearch('mobo', this)" onfocus="filterSingleSearch('mobo', this)">
                 <div class="search-dropdown-single" id="upgMoboList"></div>
                 <input type="hidden" id="upgMoboVal">
             </div>
 
-            <!-- Case (Required for Length) -->
-            <div class="input-group" id="groupCase" style="position:relative;">
+            <!-- Case -->
+            <div class="input-group" id="groupCase" style="position:relative; transition:0.3s;">
                 <label>Current Case *</label>
                 <input type="text" id="upgCaseSearch" placeholder="Search Case..." oninput="filterSingleSearch('case', this)" onfocus="filterSingleSearch('case', this)">
                 <div class="search-dropdown-single" id="upgCaseList"></div>
                 <input type="hidden" id="upgCaseVal">
             </div>
 
-            <!-- PSU (Required for Watts) -->
+            <!-- PSU -->
             <div class="input-group" style="position:relative;">
                 <label>Current Power Supply (PSU) *</label>
                 <input type="text" id="upgPsuSearch" placeholder="Search PSU..." oninput="filterSingleSearch('psu', this)" onfocus="filterSingleSearch('psu', this)">
@@ -1880,40 +1880,98 @@
 <script>
     
 // Toggle Visibility of Inputs based on Selections
+// Toggle Visibility of Inputs based on Selections
 function toggleUpgInputs() {
-    const type = document.getElementById('upgTargetType').value;
-    const gpuCount = parseInt(document.getElementById('upgGpuCount').value) || 1;
+    const typeEl = document.getElementById('upgTargetType');
+    const countEl = document.getElementById('upgGpuCount');
     
+    if (!typeEl || !countEl) return; 
+
+    const type = typeEl.value;
+    const count = parseInt(countEl.value) || 1;
+
     const gpuGroup = document.getElementById('upgGpuCountGroup');
     const groupMobo = document.getElementById('groupMobo');
     const groupCase = document.getElementById('groupCase');
+    
+    // Elements to manipulate
+    const moboInput = document.getElementById('upgMoboSearch');
+    const caseInput = document.getElementById('upgCaseSearch');
+    const moboHidden = document.getElementById('upgMoboVal');
+    const caseHidden = document.getElementById('upgCaseVal');
 
-    // 1. Handle GPU Count Dropdown State
+    // 1. GPU COUNT BOX LOGIC
+    // If upgrading CPU, disable the "Target GPU Count" box (gray it out)
     if (type === 'gpu') {
         gpuGroup.style.opacity = '1';
         gpuGroup.style.pointerEvents = 'all';
+        countEl.disabled = false;
     } else {
         gpuGroup.style.opacity = '0.3';
         gpuGroup.style.pointerEvents = 'none';
-        // If upgrading CPU, GPU count isn't relevant for selection
-        document.getElementById('upgGpuCount').value = "1"; 
+        countEl.disabled = true;
+        countEl.value = "1"; 
     }
 
-    // 2. Handle Mobo/Case Visibility (The "Automatic Blank" Logic)
-    // If upgrading GPU and user selects Multi-GPU (>1), hide and clear Mobo/Case
-    if (type === 'gpu' && gpuCount > 1) {
-        groupMobo.style.display = 'none';
-        groupCase.style.display = 'none';
+    // 2. MOTHERBOARD & CASE BOX LOGIC
+    // If Upgrading GPU AND count is > 1 (Multi-GPU), Blank out Mobo & Case
+    if (type === 'gpu' && parseInt(countEl.value) > 1) {
+        // Visual Gray out (Not disappear)
+        groupMobo.style.opacity = '0.3';
+        groupMobo.style.pointerEvents = 'none';
+        groupCase.style.opacity = '0.3';
+        groupCase.style.pointerEvents = 'none';
         
-        // Clear values to ensure logic receives "blank" input
-        document.getElementById('upgMoboVal').value = "";
-        document.getElementById('upgMoboSearch').value = "";
-        document.getElementById('upgCaseVal').value = "";
-        document.getElementById('upgCaseSearch').value = "";
+        // Disable Inputs
+        moboInput.disabled = true;
+        caseInput.disabled = true;
+        
+        // Blank Values
+        moboInput.value = "";
+        moboHidden.value = "";
+        caseInput.value = "";
+        caseHidden.value = "";
+        
+        moboInput.placeholder = "Disabled for Multi-GPU";
+        caseInput.placeholder = "Disabled for Multi-GPU";
     } else {
-        // Show them again for Single GPU or CPU upgrades
-        groupMobo.style.display = 'flex';
-        groupCase.style.display = 'flex';
+        // Enable them back
+        groupMobo.style.opacity = '1';
+        groupMobo.style.pointerEvents = 'all';
+        groupCase.style.opacity = '1';
+        groupCase.style.pointerEvents = 'all';
+        
+        moboInput.disabled = false;
+        caseInput.disabled = false;
+        
+        // Restore Placeholders if blank
+        if(moboInput.value === "") moboInput.placeholder = "Search Motherboard...";
+        if(caseInput.value === "") caseInput.placeholder = "Search Case...";
+    }
+}
+
+// Updated View Switcher to trigger toggle
+function switchMainView(viewName) {
+    document.getElementById('calculatorView').style.display = 'none';
+    document.getElementById('dataView').style.display = 'none';
+    document.getElementById('upgraderView').style.display = 'none';
+    
+    document.getElementById('navCalc').classList.remove('active');
+    document.getElementById('navData').classList.remove('active');
+    document.getElementById('navUpgrade').classList.remove('active');
+
+    if (viewName === 'calculator') {
+        document.getElementById('calculatorView').style.display = 'block';
+        document.getElementById('navCalc').classList.add('active');
+    } else if (viewName === 'data') {
+        document.getElementById('dataView').style.display = 'block';
+        document.getElementById('navData').classList.add('active');
+        renderDataList();
+    } else if (viewName === 'upgrader') {
+        document.getElementById('upgraderView').style.display = 'block';
+        document.getElementById('navUpgrade').classList.add('active');
+        // Trigger logic to ensure correct initial state
+        toggleUpgInputs();
     }
 }
 
