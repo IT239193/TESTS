@@ -1787,31 +1787,44 @@
 </div>
 
 
-    <!-- UPGRADER VIEW -->
+   <!-- UPGRADER VIEW -->
 <div id="upgraderView" style="display: none;">
     <div class="controls-wrapper active">
-        <div class="section-header">1. Requirements</div>
+        <div class="section-header">1. Requirements & Goals</div>
         <div class="input-grid">
             <div class="input-group">
                 <label>Total Budget ($)</label>
                 <input type="number" id="upgBudget" value="5000">
             </div>
             <div class="input-group">
+                <label>Career Level</label>
+                <input type="number" id="upgLevel" value="30" min="1" max="30">
+            </div>
+            <div class="input-group">
                 <label>Part to Upgrade</label>
-                <select id="upgTargetType">
+                <select id="upgTargetType" onchange="toggleUpgInputs()">
                     <option value="cpu">Processor (CPU)</option>
                     <option value="gpu">Graphics Card (GPU)</option>
+                </select>
+            </div>
+            <div class="input-group" id="upgGpuCountGroup">
+                <label>Target GPU Count</label>
+                <select id="upgGpuCount">
+                    <option value="1">Single GPU</option>
+                    <option value="2">Dual (2x)</option>
+                    <option value="3">Triple (3x)</option>
+                    <option value="4">Quad (4x)</option>
                 </select>
             </div>
         </div>
 
         <div class="section-header">2. Original System Details</div>
         <p style="color:#aaa; margin-bottom:15px; font-size:0.9em;">
-            *Required to ensure compatibility (Socket, Size, Wattage).
+            *Required to ensure compatibility (Socket, Size, Wattage, SLI/Crossfire).
         </p>
 
         <div class="upgrade-grid">
-            <!-- Motherboard (Required for Socket) -->
+            <!-- Motherboard (Required for Socket & SLI) -->
             <div class="input-group" style="position:relative;">
                 <label>Current Motherboard *</label>
                 <input type="text" id="upgMoboSearch" placeholder="Search Motherboard..." oninput="filterSingleSearch('mobo', this)" onfocus="filterSingleSearch('mobo', this)">
@@ -1863,6 +1876,7 @@
     </div>
     <div id="upgradeResultsList"></div>
 </div>
+    
 
 <script>
 
@@ -1936,10 +1950,23 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// 2. Main Upgrade Function
+// Toggle GPU Count visibility
+function toggleUpgInputs() {
+    const type = document.getElementById('upgTargetType').value;
+    const gpuGroup = document.getElementById('upgGpuCountGroup');
+    if (type === 'gpu') gpuGroup.style.opacity = '1';
+    else gpuGroup.style.opacity = '0.3';
+}
+
+// 2. Main Upgrade Function (Updated with Level & Multi-GPU)
 function findUpgrades() {
     const budget = parseFloat(document.getElementById('upgBudget').value) || 0;
-    const targetType = document.getElementById('upgTargetType').value; // 'cpu' or 'gpu'
+    const userLevel = parseInt(document.getElementById('upgLevel').value) || 30;
+    const targetType = document.getElementById('upgTargetType').value; 
+    let gpuCount = parseInt(document.getElementById('upgGpuCount').value) || 1;
+
+    // Force GPU count to 1 if upgrading CPU (simplification)
+    if (targetType === 'cpu') gpuCount = 1; 
 
     // Get Current System Parts
     const moboName = document.getElementById('upgMoboVal').value;
@@ -1968,56 +1995,105 @@ function findUpgrades() {
         return;
     }
 
-    // Determine Constraints
+    // Determine Base Power (Watts used by non-upgrade parts)
     const maxWatts = psu.watts;
     let baseWatts = 50; // Buffer for fans/drives
-    if (targetType === 'cpu') baseWatts += currGpu.watts;
+    
+    // If upgrading CPU, base is GPU + Buffer. If upgrading GPU, base is CPU + Buffer.
+    if (targetType === 'cpu') baseWatts += currGpu.watts; 
     else baseWatts += currCpu.watts;
 
+    // Current Performance Baseline
+    // Note: If upgrading GPU to dual, we compare against single current GPU score? 
+    // Or just list anything better than the single current card? 
+    // Logic: List anything with a higher TOTAL score than the current SINGLE part.
     const currentScore = targetType === 'cpu' ? (currCpu ? currCpu.scoreTS : 0) : (currGpu ? currGpu.score : 0);
 
-    // Find Upgrades
     let upgrades = [];
     
+    // --- CPU UPGRADE LOGIC ---
     if (targetType === 'cpu') {
         const candidates = Array.from(DB.cpu.values());
         candidates.forEach(c => {
-            // 1. Compatibility
-            if (c.socket !== mobo.socket) return;
-            if (box.maxCpuHeight > 0 && false) {/* Cooler check usually, ignore for raw CPU swap logic unless cooler is known*/}
+            if (c.level > userLevel) return; // Level Check
+            if (c.socket !== mobo.socket) return; // Socket Check
             
-            // 2. Power
+            // Power Check
             if ((baseWatts + c.watts) > maxWatts) return;
 
-            // 3. Performance (Must be better)
+            // Performance Check
             if (c.scoreTS <= currentScore) return;
 
-            // 4. Budget
+            // Budget Check
             if (c.price > budget) return;
 
-            upgrades.push({ part: c, diff: c.scoreTS - currentScore });
+            upgrades.push({ 
+                name: c.name, 
+                part: c, 
+                score: c.scoreTS,
+                price: c.price,
+                watts: c.watts,
+                count: 1,
+                diff: c.scoreTS - currentScore 
+            });
         });
-    } else {
+    } 
+    // --- GPU UPGRADE LOGIC ---
+    else {
         const candidates = Array.from(DB.gpu.values());
+        
         candidates.forEach(g => {
-            // 1. Compatibility
-            if (g.length > box.maxGpuLen) return;
+            if (g.level > userLevel) return; // Level Check
             
-            // 2. Power
-            if ((baseWatts + g.watts) > maxWatts) return;
+            // 1. Length Check
+            if (g.length > box.maxGpuLen) return;
 
-            // 3. Performance
-            if (g.score <= currentScore) return;
+            // 2. Multi-GPU Support & Mobo Check
+            if (gpuCount > 1) {
+                if (!g.multi) return; // Part doesn't support multi
+                
+                const maxCap = getMultiGPUCap(g.name, g.length);
+                if (maxCap < gpuCount) return; // Exceeds specific card limit (e.g. 3090 is max 2)
 
-            // 4. Budget
-            if (g.price > budget) return;
+                // Mobo SLI/Crossfire Check
+                if (g.sliType === 'SLI' && !mobo.supportSLI) return;
+                if (g.sliType === 'Crossfire' && !mobo.supportCF) return;
+                
+                // Mobo Slot Check (Simple approximation)
+                if (mobo.pciSlots < (gpuCount === 2 ? 3 : 5)) return; 
+            }
 
-            upgrades.push({ part: g, diff: g.score - currentScore });
+            // 3. Power Check
+            const totalGpuWatts = g.watts * gpuCount;
+            if ((baseWatts + totalGpuWatts) > maxWatts) return;
+
+            // 4. Performance Check
+            let totalScore = 0;
+            if (gpuCount === 1) totalScore = g.score;
+            else if (gpuCount === 2) totalScore = g.score2;
+            else if (gpuCount === 3) totalScore = g.score3;
+            else if (gpuCount === 4) totalScore = g.score4;
+
+            if (!totalScore || totalScore <= currentScore) return;
+
+            // 5. Budget Check
+            const totalPrice = g.price * gpuCount;
+            if (totalPrice > budget) return;
+
+            upgrades.push({ 
+                name: g.name, 
+                part: g, 
+                score: totalScore,
+                price: totalPrice,
+                watts: totalGpuWatts,
+                count: gpuCount,
+                diff: totalScore - currentScore 
+            });
         });
     }
 
     // Sort: Cheapest to Expensive
-    upgrades.sort((a, b) => a.part.price - b.part.price);
+    upgrades.sort((a, b) => a.price - b.price);
 
     // Render
     const list = document.getElementById('upgradeResultsList');
@@ -2029,30 +2105,32 @@ function findUpgrades() {
         return;
     }
 
-    countDiv.innerText = `Found ${upgrades.length} upgrades (Sorted by Price: Low to High)`;
+    const countLabel = gpuCount > 1 ? (gpuCount === 2 ? "Dual" : (gpuCount === 3 ? "Triple" : "Quad")) : "Single";
+    countDiv.innerText = `Found ${upgrades.length} ${countLabel} upgrades (Sorted by Price)`;
 
     upgrades.forEach(u => {
         const p = u.part;
-        const scoreVal = targetType === 'cpu' ? p.scoreTS : p.score;
         const brandClass = getBrandClass(p);
+        const nameDisplay = u.count > 1 ? `${u.count}x ${u.name}` : u.name;
         
         const html = `
-        <div class="upgrade-card" style="border-left-color: ${p.price <= budget ? '#2ecc71' : '#e74c3c'}">
+        <div class="upgrade-card" style="border-left-color: ${u.price <= budget ? '#2ecc71' : '#e74c3c'}">
             <div class="upgrade-info">
-                <div class="upgrade-name ${brandClass}" style="color:white;">${p.name}</div>
+                <div class="upgrade-name ${brandClass}" style="color:white;">${nameDisplay}</div>
                 <div class="upgrade-stats">
-                    Score: ${formatNumber(scoreVal)} <span class="upgrade-diff">(+${formatNumber(u.diff)})</span> | 
-                    Watts: ${p.watts}W | Lvl: ${p.level}
+                    Score: ${formatNumber(u.score)} <span class="upgrade-diff">(+${formatNumber(u.diff)})</span> | 
+                    Total Watts: ${u.watts}W | Lvl: ${p.level}
                 </div>
             </div>
             <div class="upgrade-meta">
-                <div class="upgrade-price">${formatCurrency(p.price)}</div>
+                <div class="upgrade-price">${formatCurrency(u.price)}</div>
             </div>
         </div>
         `;
         list.innerHTML += html;
     });
 }
+    
 
     const DB = { 
         cpu: new Map(), 
