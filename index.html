@@ -1808,9 +1808,9 @@
                 </select>
             </div>
             <div class="input-group" id="upgGpuCountGroup">
-                <label>Target GPU Count</label>
-                <select id="upgGpuCount" onchange="toggleUpgInputs()">
-                    <option value="1">Single GPU</option>
+                <label>Desired GPU Count</label>
+                <select id="upgGpuCount">
+                    <option value="1">Single (1x)</option>
                     <option value="2">Dual (2x)</option>
                     <option value="3">Triple (3x)</option>
                     <option value="4">Quad (4x)</option>
@@ -1820,21 +1820,21 @@
 
         <div class="section-header">2. Original System Details</div>
         <p style="color:#aaa; margin-bottom:15px; font-size:0.9em;">
-            *Required to ensure compatibility (Socket, Size, Wattage, SLI/Crossfire).
+            *For Single Part upgrades, accuracy is required. <b>For Multi-GPU, Mobo/Case limits are ignored.</b>
         </p>
 
         <div class="upgrade-grid">
             <!-- Motherboard -->
-            <div class="input-group" id="groupMobo" style="position:relative; transition:0.3s;">
-                <label>Current Motherboard *</label>
+            <div class="input-group" style="position:relative;">
+                <label>Current Motherboard</label>
                 <input type="text" id="upgMoboSearch" placeholder="Search Motherboard..." oninput="filterSingleSearch('mobo', this)" onfocus="filterSingleSearch('mobo', this)">
                 <div class="search-dropdown-single" id="upgMoboList"></div>
                 <input type="hidden" id="upgMoboVal">
             </div>
 
             <!-- Case -->
-            <div class="input-group" id="groupCase" style="position:relative; transition:0.3s;">
-                <label>Current Case *</label>
+            <div class="input-group" style="position:relative;">
+                <label>Current Case</label>
                 <input type="text" id="upgCaseSearch" placeholder="Search Case..." oninput="filterSingleSearch('case', this)" onfocus="filterSingleSearch('case', this)">
                 <div class="search-dropdown-single" id="upgCaseList"></div>
                 <input type="hidden" id="upgCaseVal">
@@ -1876,80 +1876,26 @@
     </div>
     <div id="upgradeResultsList"></div>
 </div>
-
+    
 <script>
-    
-// Toggle Visibility of Inputs based on Selections
-// Toggle Visibility of Inputs based on Selections
+// Toggle Visibility of GPU Count (Do NOT touch Mobo/Case inputs)
 function toggleUpgInputs() {
-    const typeEl = document.getElementById('upgTargetType');
-    const countEl = document.getElementById('upgGpuCount');
-    
-    if (!typeEl || !countEl) return; 
-
-    const type = typeEl.value;
-    const count = parseInt(countEl.value) || 1;
-
+    const type = document.getElementById('upgTargetType').value;
     const gpuGroup = document.getElementById('upgGpuCountGroup');
-    const groupMobo = document.getElementById('groupMobo');
-    const groupCase = document.getElementById('groupCase');
-    
-    // Elements to manipulate
-    const moboInput = document.getElementById('upgMoboSearch');
-    const caseInput = document.getElementById('upgCaseSearch');
-    const moboHidden = document.getElementById('upgMoboVal');
-    const caseHidden = document.getElementById('upgCaseVal');
 
-    // 1. GPU COUNT BOX LOGIC
-    // If upgrading CPU, disable the "Target GPU Count" box (gray it out)
     if (type === 'gpu') {
         gpuGroup.style.opacity = '1';
         gpuGroup.style.pointerEvents = 'all';
-        countEl.disabled = false;
     } else {
         gpuGroup.style.opacity = '0.3';
         gpuGroup.style.pointerEvents = 'none';
-        countEl.disabled = true;
-        countEl.value = "1"; 
-    }
-
-    // 2. MOTHERBOARD & CASE BOX LOGIC
-    // If Upgrading GPU AND count is > 1 (Multi-GPU), Blank out Mobo & Case
-    if (type === 'gpu' && parseInt(countEl.value) > 1) {
-        // Visual Gray out (Not disappear)
-        groupMobo.style.opacity = '0.3';
-        groupMobo.style.pointerEvents = 'none';
-        groupCase.style.opacity = '0.3';
-        groupCase.style.pointerEvents = 'none';
-        
-        // Disable Inputs
-        moboInput.disabled = true;
-        caseInput.disabled = true;
-        
-        // Blank Values
-        moboInput.value = "";
-        moboHidden.value = "";
-        caseInput.value = "";
-        caseHidden.value = "";
-        
-        moboInput.placeholder = "Disabled for Multi-GPU";
-        caseInput.placeholder = "Disabled for Multi-GPU";
-    } else {
-        // Enable them back
-        groupMobo.style.opacity = '1';
-        groupMobo.style.pointerEvents = 'all';
-        groupCase.style.opacity = '1';
-        groupCase.style.pointerEvents = 'all';
-        
-        moboInput.disabled = false;
-        caseInput.disabled = false;
-        
-        // Restore Placeholders if blank
-        if(moboInput.value === "") moboInput.placeholder = "Search Motherboard...";
-        if(caseInput.value === "") caseInput.placeholder = "Search Case...";
+        document.getElementById('upgGpuCount').value = "1"; 
     }
 }
 
+
+
+    
 // Updated View Switcher to trigger toggle
 function switchMainView(viewName) {
     document.getElementById('calculatorView').style.display = 'none';
@@ -2052,14 +1998,16 @@ function toggleUpgInputs() {
     else gpuGroup.style.opacity = '0.3';
 }
 
-// 2. Main Upgrade Function (Modified: Optional Mobo/Case for Multi-GPU)
+
+
+
+    // 2. Main Upgrade Function (Ignores Mobo/Case for Multi-GPU)
 function findUpgrades() {
     const budget = parseFloat(document.getElementById('upgBudget').value) || 0;
     const userLevel = parseInt(document.getElementById('upgLevel').value) || 30;
     const targetType = document.getElementById('upgTargetType').value; 
     let gpuCount = parseInt(document.getElementById('upgGpuCount').value) || 1;
 
-    // Force GPU count to 1 if upgrading CPU
     if (targetType === 'cpu') gpuCount = 1; 
 
     // Get Current System Parts
@@ -2075,21 +2023,17 @@ function findUpgrades() {
     const currCpu = DB.cpu.get(cpuName);
     const currGpu = DB.gpu.get(gpuName);
 
-    // --- VALIDATION LOGIC ---
-    const isMultiGpu = (targetType === 'gpu' && gpuCount > 1);
+    // --- VALIDATION ---
+    // PSU is always required for Wattage calcs
+    if (!psu) {
+        alert("Please select a Power Supply (PSU) to calculate power limits.");
+        return;
+    }
 
-    if (isMultiGpu) {
-        // Relaxed Rules: Only PSU required for power calc
-        if (!psu) {
-            alert("Please select a Power Supply (PSU) to calculate power limits.");
-            return;
-        }
-    } else {
-        // Strict Rules: Mobo, Case, PSU required for Single GPU/CPU
-        if (!mobo || !box || !psu) {
-            alert("Please select a Motherboard, Case, and PSU to ensure compatibility.");
-            return;
-        }
+    // Only require Mobo/Case if doing CPU or SINGLE GPU upgrade
+    if (gpuCount === 1) {
+        if (!mobo && targetType === 'cpu') { alert("Motherboard required for CPU upgrade compatibility."); return; }
+        // Case is optional but recommended for single GPU length checks
     }
 
     if (targetType === 'cpu' && !currGpu) {
@@ -2103,12 +2047,10 @@ function findUpgrades() {
 
     // Determine Base Power
     const maxWatts = psu.watts;
-    let baseWatts = 50; // Buffer
-    
+    let baseWatts = 50; 
     if (targetType === 'cpu') baseWatts += currGpu.watts; 
     else baseWatts += currCpu.watts;
 
-    // Current Performance Baseline
     const currentScore = targetType === 'cpu' ? (currCpu ? currCpu.scoreTS : 0) : (currGpu ? currGpu.score : 0);
 
     let upgrades = [];
@@ -2118,8 +2060,7 @@ function findUpgrades() {
         const candidates = Array.from(DB.cpu.values());
         candidates.forEach(c => {
             if (c.level > userLevel) return;
-            // Strict checks always apply for CPU (socket mismatch is fatal)
-            if (c.socket !== mobo.socket) return; 
+            if (mobo && c.socket !== mobo.socket) return; // Strict Socket Check
             
             if ((baseWatts + c.watts) > maxWatts) return;
             if (c.scoreTS <= currentScore) return;
@@ -2128,10 +2069,10 @@ function findUpgrades() {
             upgrades.push({ 
                 name: c.name, 
                 part: c, 
-                score: c.scoreTS,
-                price: c.price,
-                watts: c.watts,
-                count: 1,
+                score: c.scoreTS, 
+                price: c.price, 
+                watts: c.watts, 
+                count: 1, 
                 diff: c.scoreTS - currentScore 
             });
         });
@@ -2143,29 +2084,24 @@ function findUpgrades() {
         candidates.forEach(g => {
             if (g.level > userLevel) return;
             
-            // 1. Length Check (Only if Case is provided)
-            if (box && g.length > box.maxGpuLen) return;
-
-            // 2. Multi-GPU Support
+            // 1. Multi-GPU Support Check
             if (gpuCount > 1) {
-                if (!g.multi) return; // The card itself must support multi-gpu
-                
+                if (!g.multi) return; // Card itself must support multi
                 const maxCap = getMultiGPUCap(g.name, g.length);
-                if (maxCap < gpuCount) return; 
-
-                // Motherboard Checks (Only if Mobo is provided)
-                if (mobo) {
-                    if (g.sliType === 'SLI' && !mobo.supportSLI) return;
-                    if (g.sliType === 'Crossfire' && !mobo.supportCF) return;
-                    if (mobo.pciSlots < (gpuCount === 2 ? 3 : 5)) return;
-                }
+                if (maxCap < gpuCount) return; // Exceeds specific card limit
+                
+                // IGNORE MOBO SLI/CROSSFIRE/SLOTS HERE (As requested)
+                // IGNORE CASE LENGTH HERE (As requested)
+            } else {
+                // Single GPU - Respect Case Limits if provided
+                if (box && g.length > box.maxGpuLen) return;
             }
 
-            // 3. Power Check
+            // 2. Power Check
             const totalGpuWatts = g.watts * gpuCount;
             if ((baseWatts + totalGpuWatts) > maxWatts) return;
 
-            // 4. Performance Check
+            // 3. Performance Check
             let totalScore = 0;
             if (gpuCount === 1) totalScore = g.score;
             else if (gpuCount === 2) totalScore = g.score2;
@@ -2174,17 +2110,17 @@ function findUpgrades() {
 
             if (!totalScore || totalScore <= currentScore) return;
 
-            // 5. Budget Check
+            // 4. Budget Check
             const totalPrice = g.price * gpuCount;
             if (totalPrice > budget) return;
 
             upgrades.push({ 
                 name: g.name, 
                 part: g, 
-                score: totalScore,
-                price: totalPrice,
-                watts: totalGpuWatts,
-                count: gpuCount,
+                score: totalScore, 
+                price: totalPrice, 
+                watts: totalGpuWatts, 
+                count: gpuCount, 
                 diff: totalScore - currentScore 
             });
         });
