@@ -2071,7 +2071,7 @@ function toggleUpgInputs() {
 }
 
 
-// 2. Main Upgrade Function (Fully Updated)
+// 2. Main Upgrade Function (Updated Score Position)
 function findUpgrades() {
     const budget = parseFloat(document.getElementById('upgBudget').value) || 0;
     const userLevel = parseInt(document.getElementById('upgLevel').value) || 30;
@@ -2093,7 +2093,7 @@ function findUpgrades() {
             return;
         }
     } else {
-        allowedCounts = [1]; // CPU upgrades don't use this logic
+        allowedCounts = [1]; 
     }
 
     // Get Current System Parts
@@ -2131,14 +2131,10 @@ function findUpgrades() {
     let currentScore = 0;
 
     if (targetType === 'cpu') {
-        // Upgrading CPU: Base power is (Current GPU * Count) + Buffer
         baseWatts += (currGpu.watts * currGpuCount);
         currentScore = currCpu ? currCpu.scoreTS : 0;
     } else {
-        // Upgrading GPU: Base power is Current CPU + Buffer
         baseWatts += currCpu.watts;
-        
-        // Calculate Baseline GPU Score based on "Current GPU Count"
         if (currGpu) {
             if (currGpuCount === 1) currentScore = currGpu.score;
             else if (currGpuCount === 2) currentScore = currGpu.score2 || 0;
@@ -2154,7 +2150,7 @@ function findUpgrades() {
         const candidates = Array.from(DB.cpu.values());
         candidates.forEach(c => {
             if (c.level > userLevel) return;
-            if (c.socket !== mobo.socket) return; // Strict Socket Check
+            if (c.socket !== mobo.socket) return; 
             
             if ((baseWatts + c.watts) > maxWatts) return;
             if (c.scoreTS <= currentScore) return;
@@ -2171,43 +2167,33 @@ function findUpgrades() {
             });
         });
     } 
-    // --- GPU UPGRADE LOGIC (Iterate Counts) ---
+    // --- GPU UPGRADE LOGIC ---
     else {
         const candidates = Array.from(DB.gpu.values());
         
         candidates.forEach(g => {
             if (g.level > userLevel) return;
             
-            // Loop through selected counts (e.g. 1, 2)
             for (let count of allowedCounts) {
-                
-                // 1. Multi-GPU Capability Check
                 if (count > 1) {
-                    if (!g.multi) continue; // Card itself must support multi
+                    if (!g.multi) continue; 
                     const maxCap = getMultiGPUCap(g.name, g.length);
-                    if (maxCap < count) continue; // Exceeds card specific limit
-                    
-                    // SKIP MOBO/CASE CHECKS AS REQUESTED
+                    if (maxCap < count) continue; 
                 } else {
-                    // Single GPU - Respect Case Limits if provided
                     if (box && g.length > box.maxGpuLen) continue;
                 }
 
-                // 2. Power Check
                 const totalGpuWatts = g.watts * count;
                 if ((baseWatts + totalGpuWatts) > maxWatts) continue;
 
-                // 3. Performance Check
                 let totalScore = 0;
                 if (count === 1) totalScore = g.score;
                 else if (count === 2) totalScore = g.score2;
                 else if (count === 3) totalScore = g.score3;
                 else if (count === 4) totalScore = g.score4;
 
-                // If score is 0 (unsupported config) or less than current baseline
                 if (!totalScore || totalScore <= currentScore) continue;
 
-                // 4. Budget Check
                 const totalPrice = g.price * count;
                 if (totalPrice > budget) continue;
 
@@ -2224,7 +2210,6 @@ function findUpgrades() {
         });
     }
 
-    // Sort: Cheapest to Expensive
     upgrades.sort((a, b) => a.price - b.price);
 
     const list = document.getElementById('upgradeResultsList');
@@ -2248,18 +2233,25 @@ function findUpgrades() {
             <div class="upgrade-info">
                 <div class="upgrade-name ${brandClass}" style="color:white;">${nameDisplay}</div>
                 <div class="upgrade-stats">
-                    Score: ${formatNumber(u.score)} <span class="upgrade-diff">(+${formatNumber(u.diff)})</span> | 
                     Total Watts: ${u.watts}W | Lvl: ${p.level}
                 </div>
             </div>
             <div class="upgrade-meta">
-                <div class="upgrade-price">${formatCurrency(u.price)}</div>
+                <div class="upgrade-price">
+                    ${formatCurrency(u.price)} 
+                    <span style="color: #666; margin: 0 8px; font-weight:normal;">|</span> 
+                    <span style="color: #fff;">${formatNumber(u.score)}</span>
+                    <span class="upgrade-diff" style="font-size:0.65em; vertical-align: middle;">(+${formatNumber(u.diff)})</span>
+                </div>
             </div>
         </div>
         `;
         list.innerHTML += html;
     });
 }
+
+
+    
 
     const DB = { 
         cpu: new Map(), 
