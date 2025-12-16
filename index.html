@@ -1648,38 +1648,6 @@
                 </div>
 
                 <div class="input-group">
-    <label>Specific CPU Cooler(s)</label>
-    <div id="multiCooler" class="multi-select-container">
-        <div class="multi-select-display" onclick="toggleDropdown('coolerDropdown')">Any</div>
-        <div id="coolerDropdown" class="multi-dropdown">
-            <div class="quick-filter-bar">
-                <button class="filter-btn btn-clear" onclick="clearFilter('coolerNames')">Clear</button>
-            </div>
-            <div class="dropdown-search-container">
-                <input type="text" class="dropdown-search" placeholder="Filter CPU Coolers..." oninput="filterDropdownList(this)">
-            </div>
-            <div class="dropdown-list-container" id="coolerListContainer"></div>
-        </div>
-    </div>
-</div>
-
-<div class="input-group">
-    <label>Specific Case Fan(s) (Quantity)</label>
-    <div id="multiFan" class="multi-select-container">
-        <div class="multi-select-display" onclick="toggleDropdown('fanDropdown')">Any</div>
-        <div id="fanDropdown" class="multi-dropdown">
-            <div class="quick-filter-bar">
-                <button class="filter-btn btn-clear" onclick="clearFilter('fanNames')">Clear</button>
-            </div>
-            <div class="dropdown-search-container">
-                <input type="text" class="dropdown-search" placeholder="Filter Case Fans..." oninput="filterDropdownList(this)">
-            </div>
-            <div class="dropdown-list-container" id="fanListContainer"></div>
-        </div>
-    </div>
-</div>
-
-                <div class="input-group">
                     <label>Specific SSD (Quantity)</label>
                     <div id="multiSSD" class="multi-select-container">
                         <div class="multi-select-display" onclick="toggleDropdown('ssdDropdown')">Any</div>
@@ -1878,71 +1846,204 @@
             *Required to ensure compatibility for Single Part swaps.
         </p>
 
-        <div class="upgrade-grid">
-            <!-- Motherboard -->
-            <div class="input-group" style="position:relative;">
-                <label>Current Motherboard</label>
-                <input type="text" id="upgMoboSearch" placeholder="Search Motherboard..." oninput="filterSingleSearch('mobo', this)" onfocus="filterSingleSearch('mobo', this)">
-                <div class="search-dropdown-single" id="upgMoboList"></div>
-                <input type="hidden" id="upgMoboVal">
-            </div>
-
-            <!-- Case -->
-            <div class="input-group" style="position:relative;">
-                <label>Current Case</label>
-                <input type="text" id="upgCaseSearch" placeholder="Search Case..." oninput="filterSingleSearch('case', this)" onfocus="filterSingleSearch('case', this)">
-                <div class="search-dropdown-single" id="upgCaseList"></div>
-                <input type="hidden" id="upgCaseVal">
-            </div>
-
-            <!-- PSU -->
-            <div class="input-group" style="position:relative;">
-                <label>Current Power Supply (PSU) *</label>
-                <input type="text" id="upgPsuSearch" placeholder="Search PSU..." oninput="filterSingleSearch('psu', this)" onfocus="filterSingleSearch('psu', this)">
-                <div class="search-dropdown-single" id="upgPsuList"></div>
-                <input type="hidden" id="upgPsuVal">
-            </div>
-        </div>
-
-        <div class="upgrade-grid">
-            <!-- Current CPU -->
-            <div class="input-group" style="position:relative;">
-                <label>Current CPU</label>
-                <input type="text" id="upgCpuSearch" placeholder="Search CPU..." oninput="filterSingleSearch('cpu', this)" onfocus="filterSingleSearch('cpu', this)">
-                <div class="search-dropdown-single" id="upgCpuList"></div>
-                <input type="hidden" id="upgCpuVal">
-            </div>
-
-            <!-- Current GPU with Count Selector -->
-            <div class="input-group" style="position:relative;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <label style="margin:0;">Current GPU</label>
-                    <select id="upgCurrentGpuCount" style="width:60px; height:24px; padding:0 5px; font-size:0.9em; background:#222; color:#fff; border:1px solid #555;">
-                        <option value="1">1x</option>
-                        <option value="2">2x</option>
-                        <option value="3">3x</option>
-                        <option value="4">4x</option>
-                    </select>
-                </div>
-                <input type="text" id="upgGpuSearch" placeholder="Search GPU..." oninput="filterSingleSearch('gpu', this)" onfocus="filterSingleSearch('gpu', this)">
-                <div class="search-dropdown-single" id="upgGpuList"></div>
-                <input type="hidden" id="upgGpuVal">
-            </div>
-        </div>
-
-        <button class="btn-generate" onclick="findUpgrades()">GET BETTER PARTS</button>
+       <!-- REPLACEMENT HTML: UPDATED UPGRADER INPUT GRID -->
+<div class="upgrade-grid">
+    <!-- Motherboard -->
+    <div class="input-group" style="position:relative;">
+        <label>Current Motherboard</label>
+        <input type="text" id="upgMoboSearch" placeholder="Search Motherboard..." 
+               oninput="filterSingleSearchEnhanced('mobo', this)" 
+               onfocus="filterSingleSearchEnhanced('mobo', this)">
+        <div class="search-dropdown-single" id="upgMoboList"></div>
+        <input type="hidden" id="upgMoboVal">
     </div>
 
-    <!-- Results -->
-    <div class="results-meta">
-        <div class="result-count" id="upgResultCount">Results will appear here</div>
+    <!-- Case (Selection here updates Cooler/Fan lists automatically) -->
+    <div class="input-group" style="position:relative;">
+        <label>Current Case</label>
+        <input type="text" id="upgCaseSearch" placeholder="Search Case..." 
+               oninput="filterSingleSearchEnhanced('case', this)" 
+               onfocus="filterSingleSearchEnhanced('case', this)">
+        <div class="search-dropdown-single" id="upgCaseList"></div>
+        <input type="hidden" id="upgCaseVal">
     </div>
-    <div id="upgradeResultsList"></div>
+
+    <!-- PSU -->
+    <div class="input-group" style="position:relative;">
+        <label>Current Power Supply (PSU)</label>
+        <input type="text" id="upgPsuSearch" placeholder="Search PSU..." 
+               oninput="filterSingleSearchEnhanced('psu', this)" 
+               onfocus="filterSingleSearchEnhanced('psu', this)">
+        <div class="search-dropdown-single" id="upgPsuList"></div>
+        <input type="hidden" id="upgPsuVal">
+    </div>
+
+    <!-- NEW: CPU Cooler Input -->
+    <div class="input-group" style="position:relative;">
+        <label>Current CPU Cooler</label>
+        <input type="text" id="upgCoolerSearch" placeholder="Search Cooler..." 
+               oninput="filterSingleSearchEnhanced('cooler', this)" 
+               onfocus="filterSingleSearchEnhanced('cooler', this)">
+        <div class="search-dropdown-single" id="upgCoolerList"></div>
+        <input type="hidden" id="upgCoolerVal">
+    </div>
+
+    <!-- NEW: Case Fans Input with Quantity -->
+    <div class="input-group" style="position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="margin:0;">Current Case Fans</label>
+            <!-- Quantity Selector for Multiple Fans -->
+            <input type="number" id="upgFanQty" value="1" min="1" max="20" 
+                   style="width:60px; height:24px; padding:0 5px; font-size:0.9em; background:#222; color:#fff; border:1px solid #555;"
+                   title="Quantity">
+        </div>
+        <input type="text" id="upgFanSearch" placeholder="Search Case Fan..." 
+               oninput="filterSingleSearchEnhanced('fan', this)" 
+               onfocus="filterSingleSearchEnhanced('fan', this)">
+        <div class="search-dropdown-single" id="upgFanList"></div>
+        <input type="hidden" id="upgFanVal">
+    </div>
+
+    <!-- CPU -->
+    <div class="input-group" style="position:relative;">
+        <label>Current CPU</label>
+        <input type="text" id="upgCpuSearch" placeholder="Search CPU..." 
+               oninput="filterSingleSearchEnhanced('cpu', this)" 
+               onfocus="filterSingleSearchEnhanced('cpu', this)">
+        <div class="search-dropdown-single" id="upgCpuList"></div>
+        <input type="hidden" id="upgCpuVal">
+    </div>
+
+    <!-- GPU -->
+    <div class="input-group" style="position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="margin:0;">Current GPU</label>
+            <select id="upgCurrentGpuCount" style="width:60px; height:24px; padding:0 5px; font-size:0.9em; background:#222; color:#fff; border:1px solid #555;">
+                <option value="1">1x</option>
+                <option value="2">2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+            </select>
+        </div>
+        <input type="text" id="upgGpuSearch" placeholder="Search GPU..." 
+               oninput="filterSingleSearchEnhanced('gpu', this)" 
+               onfocus="filterSingleSearchEnhanced('gpu', this)">
+        <div class="search-dropdown-single" id="upgGpuList"></div>
+        <input type="hidden" id="upgGpuVal">
+    </div>
 </div>
 
 
-    
 <script>
+
+
+// --- ENHANCED SEARCH & FILTER LOGIC (PASTE AT TOP OF SCRIPT) ---
+// This handles the custom formatting (Name | Size | Airflow | Price) 
+// and dynamic filtering based on the selected Case.
+
+function filterSingleSearchEnhanced(type, input) {
+    // 1. Setup Containers
+    const listId = `upg${type.charAt(0).toUpperCase() + type.slice(1)}List`;
+    const container = document.getElementById(listId);
+    if (!container) return;
+
+    // 2. Get Data Source & Current Context
+    const val = input.value.toLowerCase();
+    
+    // Check if a Case is selected to filter compatibility
+    const caseInput = document.getElementById('upgCaseVal');
+    const currentCase = (caseInput && caseInput.value && DB.cases) ? DB.cases.get(caseInput.value) : null;
+
+    let source = [];
+    
+    // 3. Determine Source & Apply Auto-Filtering
+    if (type === 'mobo') source = Array.from(DB.mobo.values());
+    else if (type === 'case') source = Array.from(DB.cases.values());
+    else if (type === 'psu') source = Array.from(DB.psu.values());
+    else if (type === 'cpu') source = Array.from(DB.cpu.values());
+    else if (type === 'gpu') source = Array.from(DB.gpu.values());
+    else if (type === 'cooler') {
+        source = Array.from(DB.cooler.values());
+        
+        // AUTO-UPDATE: Filter Coolers based on Case CPU Height Limit
+        if (currentCase) {
+            source = source.filter(c => {
+                // For Air Coolers: Check Max Height
+                if (c.type.includes('Air')) {
+                    return c.height <= currentCase.maxCpuHeight;
+                }
+                // For Liquid Coolers: Check Radiator Support (using radSizes logic if available)
+                if (currentCase.radSizes && c.size) {
+                    return currentCase.radSizes.includes(c.size.toString());
+                }
+                return true; // Default allow if unsure
+            });
+        }
+    }
+    else if (type === 'fan') {
+        source = Array.from(DB.fan.values());
+        
+        // AUTO-UPDATE: Filter Fans based on Case Support
+        if (currentCase && currentCase.radSizes) {
+             source = source.filter(f => {
+                // Check if the case supports this fan size (e.g. 120, 140)
+                return currentCase.radSizes.includes(f.size.toString());
+             });
+        }
+    }
+
+    // 4. Render Results
+    container.innerHTML = '';
+    const filtered = source.filter(item => item.name.toLowerCase().includes(val)).slice(0, 50);
+
+    if (filtered.length > 0) {
+        container.classList.add('show');
+        filtered.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'search-item';
+            
+            // --- CUSTOM DISPLAY FORMATTING ---
+            if (type === 'cooler') {
+                const sizeStr = item.type.includes('Air') ? `Height: ${item.height}mm` : `Size: ${item.size}mm`;
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; width:100%;">
+                        <span><b>${item.name}</b></span>
+                        <span style="color:#aaa; font-size:0.9em;">${sizeStr} | ${item.flow || '?'} CFM</span>
+                        <span style="color:var(--price-red); font-weight:bold;">$${item.price}</span>
+                    </div>`;
+            } else if (type === 'fan') {
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; width:100%;">
+                        <span><b>${item.name}</b></span>
+                        <span style="color:#aaa; font-size:0.9em;">${item.size}mm | ${item.flow || '?'} CFM</span>
+                        <span style="color:var(--price-red); font-weight:bold;">$${item.price}</span>
+                    </div>`;
+            } else {
+                div.innerText = item.name;
+            }
+
+            // Click Handler
+            div.onclick = () => {
+                input.value = item.name;
+                const hidden = document.getElementById(`upg${type.charAt(0).toUpperCase() + type.slice(1)}Val`);
+                if(hidden) hidden.value = item.name;
+                
+                // If Case changed, clear incompatible cooler/fan selections
+                if (type === 'case') {
+                    document.getElementById('upgCoolerSearch').value = '';
+                    document.getElementById('upgFanSearch').value = '';
+                }
+                
+                container.classList.remove('show');
+            };
+            container.appendChild(div);
+        });
+    } else {
+        container.classList.remove('show');
+    }
+}
+
+
 // Update Display Text for Checkboxes
 function updateUpgDisplay() {
     const c1 = document.getElementById('chkGpu1').checked;
@@ -2314,24 +2415,22 @@ const OPTIMIZE_CASE_SELECTION = true;  // If TRUE: Auto-selects the #1 Cheapest 
     let sqlDB = null;
     let buildCount = 0;
 
-const selectedOptions = {
-    vram: new Set(),
-    length: new Set(),
-    socket: new Set(),
-    cpuNames: new Set(),
-    gpuNames: new Set(),
-    gpuCount: new Set(), 
-    moboNames: new Set(),
-    caseNames: new Set(),
-    ramNames: new Map(),
-    ramSizes: new Set(), 
-    ramMfgrs: new Set(), 
-    ramFreqs: new Set(), 
-    ssdNames: new Map(), 
-    hddNames: new Map(),
-    coolerNames: new Set(),  // ADD THIS
-    fanNames: new Map()      // ADD THIS (Map for quantity support)
-};
+    const selectedOptions = {
+        vram: new Set(),
+        length: new Set(),
+        socket: new Set(),
+        cpuNames: new Set(),
+        gpuNames: new Set(),
+        gpuCount: new Set(), 
+        moboNames: new Set(),
+        caseNames: new Set(),
+        ramNames: new Map(), // Changed from Set to Map for quantity support
+        ramSizes: new Set(), 
+        ramMfgrs: new Set(), 
+        ramFreqs: new Set(), 
+        ssdNames: new Map(), 
+        hddNames: new Map() 
+    };
 
     let lastClickedOption = { category: null, index: -1 };
     let warningDismissed = false; 
@@ -3091,56 +3190,6 @@ const freqStr = `${item.baseFreq || "?"} / ${item.stdFreq || "?"} / ${item.maxFr
         populateStorageSizeButtons('ssd', ssdList);
         populateStorageSizeButtons('hdd', hddList);
 
-        // ADD THIS SECTION after storage population (around line 930)
-
-// CPU Cooler Filtering
-let validCoolers = Array.from(DB.cooler.values()).filter(c => c.level <= currentLvl);
-
-// Smart filter based on selected case
-if (selectedOptions.caseNames.size > 0) {
-    const selectedCases = Array.from(selectedOptions.caseNames).map(name => DB.cases.get(name));
-    
-    validCoolers = validCoolers.filter(cooler => {
-        // Check if cooler fits in ANY of the selected cases
-        return selectedCases.some(caseObj => {
-            if (!caseObj) return true;
-            
-            if (cooler.type.includes('Air')) {
-                return caseObj.maxCpuHeight >= cooler.height;
-            } else if (cooler.type.includes('Liquid')) {
-                return caseObj.radSizes.includes(cooler.size.toString());
-            }
-            return true;
-        });
-    });
-}
-
-populateMultiSelect('coolerNames', validCoolers.map(c => c.name).sort(), 'coolerListContainer');
-
-// Case Fan Filtering
-let validFans = Array.from(DB.fan.values()).filter(f => f.level <= currentLvl);
-
-// Smart filter based on selected case
-if (selectedOptions.caseNames.size > 0) {
-    const selectedCases = Array.from(selectedOptions.caseNames).map(name => DB.cases.get(name));
-    
-    validFans = validFans.filter(fan => {
-        // Check if fan size is supported by ANY of the selected cases
-        return selectedCases.some(caseObj => {
-            if (!caseObj) return true;
-            
-            const radSizes = caseObj.radSizes || "";
-            if (fan.size === 120 && radSizes.includes('120')) return true;
-            if (fan.size === 140 && radSizes.includes('140')) return true;
-            if (fan.size === 200 && radSizes.includes('200')) return true;
-            
-            return false;
-        });
-    });
-}
-
-populateMultiSelect('fanNames', validFans.map(f => f.name).sort(), 'fanListContainer');
-
         const stickSelect = document.getElementById('ramSticks');
         const fourStickOption = stickSelect.querySelector('option[value="4"]');
         const canSupport4Sticks = mobos.some(m => m.size !== 'Mini-ITX');
@@ -3241,21 +3290,7 @@ populateMultiSelect('fanNames', validFans.map(f => f.name).sort(), 'fanListConta
             } else if (category === 'moboNames') {
                 const m = DB.mobo.get(opt);
                 if (m) label = `<span style="font-size:0.9em">${m.name} | PCI Slots: ${m.pciSlots}</span>`;
-            }
-            } else if (category === 'coolerNames') {
-    const c = DB.cooler.get(opt);
-    if (c) {
-        const sizeInfo = c.type.includes('Air') ? `Height: ${c.height}mm` : `Size: ${c.size}mm`;
-        label = `<span style="font-size:0.9em">${c.name} | ${sizeInfo} | ${c.flow} CFM | ${formatCurrency(c.price)}</span>`;
-    }
-} else if (category === 'fanNames') {
-    const f = DB.fan.get(opt);
-    if (f) {
-        label = `<span style="font-size:0.9em">${f.name} | ${f.size}mm | ${f.flow} CFM | ${formatCurrency(f.price)}</span>`;
-    }
-}
-            
-            else if (category === 'caseNames') {
+            } else if (category === 'caseNames') {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Slots: ${c.gpuSlots}</span>`;
             } else if (isStorage) {
@@ -3278,25 +3313,6 @@ populateMultiSelect('fanNames', validFans.map(f => f.name).sort(), 'fanListConta
                 const safeName = opt.replace(/'/g, "\\'");
                 div.innerHTML = `
                     <div class="option-left" onclick="toggleStorageSelection('${category}', '${safeName}', 1)">
-                    } else if (category === 'fanNames') {
-    // NEW: Fan with quantity controls like storage
-    const safeName = opt.replace(/'/g, "\\'");
-    const fanCount = selectedOptions[category].has(opt) ? selectedOptions[category].get(opt) : 0;
-    if (fanCount > 0) {
-        isSelected = true;
-        div.classList.add('selected');
-    }
-    div.innerHTML = `
-        <div class="option-left" onclick="event.stopPropagation(); toggleFanSelection('${safeName}', 1);">
-            <div class="cb-custom"></div>
-            <span>${label}</span>
-        </div>
-        <div class="qty-controls" onclick="event.stopPropagation()">
-            <button class="qty-btn" onclick="modifyFanQty('${safeName}', -1)">-</button>
-            <span class="qty-val">${fanCount}</span>
-            <button class="qty-btn" onclick="modifyFanQty('${safeName}', 1)">+</button>
-        </div>
-    `;
                         <div class="cb-custom"></div>
                         <span>${label}</span>
                     </div>
@@ -3391,56 +3407,6 @@ window.modifyRamQty = function(value, delta) {
     }
     refreshRamDropdown();
     updateDisplayLabel('ramNames');
-}
-
-
-    // ADD THESE THREE FUNCTIONS after the RAM quantity functions
-
-window.toggleFanSelection = function(value, defaultQty) {
-    if (selectedOptions.fanNames.has(value)) {
-        selectedOptions.fanNames.delete(value);
-    } else {
-        selectedOptions.fanNames.set(value, defaultQty);
-    }
-    refreshFanDropdown();
-    updateDisplayLabel('fanNames');
-}
-
-window.modifyFanQty = function(value, delta) {
-    let current = selectedOptions.fanNames.get(value) || 0;
-    let next = current + delta;
-    if (next <= 0) {
-        selectedOptions.fanNames.delete(value);
-    } else {
-        selectedOptions.fanNames.set(value, next);
-    }
-    refreshFanDropdown();
-    updateDisplayLabel('fanNames');
-}
-
-function refreshFanDropdown() {
-    const container = document.getElementById('fanListContainer');
-    const scrollTop = container.scrollTop;
-    
-    const currentLvl = parseInt(document.getElementById('level').value) || 30;
-    let validFans = Array.from(DB.fan.values()).filter(f => f.level <= currentLvl);
-    
-    if (selectedOptions.caseNames.size > 0) {
-        const selectedCases = Array.from(selectedOptions.caseNames).map(name => DB.cases.get(name));
-        validFans = validFans.filter(fan => {
-            return selectedCases.some(caseObj => {
-                if (!caseObj) return true;
-                const radSizes = caseObj.radSizes || "";
-                if (fan.size === 120 && radSizes.includes('120')) return true;
-                if (fan.size === 140 && radSizes.includes('140')) return true;
-                if (fan.size === 200 && radSizes.includes('200')) return true;
-                return false;
-            });
-        });
-    }
-    
-    populateMultiSelect('fanNames', validFans.map(f => f.name).sort(), 'fanListContainer');
-    container.scrollTop = scrollTop;
 }
 
 // NEW FUNCTION 3: Refresh RAM dropdown
@@ -3538,22 +3504,21 @@ function toggleOption(category, value, element, event) {
     else if(category === 'caseNames') containerId = 'caseListContainer';
     else if(category === 'ssdNames') containerId = 'ssdListContainer';
     else if(category === 'hddNames') containerId = 'hddListContainer';
-        else if(category === 'coolerNames') containerId = 'coolerListContainer';
-else if(category === 'fanNames') containerId = 'fanListContainer';
 
 // 3. Update the UI
     const container = document.getElementById(containerId);
     
-if (category === 'ssdNames' || category === 'hddNames') {
-     refreshStorageDropdown(category);
-     if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.style.display = 'flex');
-} else if (category === 'ramNames') {
-     refreshRamDropdown();
-} else if (category === 'fanNames') {  // ADD THIS
-     refreshFanDropdown();
-} else {
-     if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.classList.remove('selected'));
-}
+    if (category === 'ssdNames' || category === 'hddNames') {
+         // Special handling for storage (quantity based)
+         refreshStorageDropdown(category);
+         if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.style.display = 'flex');
+    } else if (category === 'ramNames') {
+         // NEW: Special handling for RAM (quantity based)
+         refreshRamDropdown();
+    } else {
+         // Standard handling: remove 'selected' class
+         if(container) container.querySelectorAll('.multi-option').forEach(opt => opt.classList.remove('selected'));
+    }
     
     // 4. Update Label text
     updateDisplayLabel(category);
@@ -3582,8 +3547,6 @@ if (category === 'ssdNames' || category === 'hddNames') {
             case 'caseNames': displayId = 'multiCase'; break;
             case 'ssdNames': displayId = 'multiSSD'; break;
             case 'hddNames': displayId = 'multiHDD'; break;
-                case 'coolerNames': displayId = 'multiCooler'; break;
-case 'fanNames': displayId = 'multiFan'; break;
         }
 
         const display = document.getElementById(displayId).querySelector('.multi-select-display');
@@ -3597,16 +3560,6 @@ if (category === 'ssdNames' || category === 'hddNames') {
             else display.textContent = `${totalCount} drives selected`;
             return;
         }
-
-        // NEW: Handle Fan quantities
-if (category === 'fanNames') {
-    let totalCount = 0;
-    selectedOptions[category].forEach(qty => totalCount += qty);
-    
-    if (totalCount === 0) display.textContent = "Any";
-    else display.textContent = `${totalCount} fans selected`;
-    return;
-}
 
         // NEW: Handle RAM quantities
         if (category === 'ramNames') {
@@ -4326,24 +4279,16 @@ function assembleBuilds(rams, mobos, cpu, gpuConf, sticks, score, cpuScore, conf
             // Cooler / PSU / Fan
             let currentPrice = corePrice + (validCase ? validCase.price : 0);
             
-           let cooler = null;
-if (config.useCooler) {
-    // Use user-selected coolers if specified
-    let coolerCandidates = lists.allCoolers;
-    
-    if (selectedOptions.coolerNames.size > 0) {
-        coolerCandidates = coolerCandidates.filter(c => selectedOptions.coolerNames.has(c.name));
-    }
-    
-    cooler = coolerCandidates.find(c => {
-       if (!c.sockets.includes(cpu.socket)) return false;
-       if (validCase && c.type.includes('Air') && validCase.maxCpuHeight < c.height) return false;
-       if (validCase && c.type.includes('Liquid') && !validCase.radSizes.includes(c.size.toString())) return false;
-       return true;
-    });
-    if (cooler) currentPrice += cooler.price;
-    else continue; 
-}
+            let cooler = null;
+            if (config.useCooler) {
+                cooler = lists.allCoolers.find(c => {
+                   if (!c.sockets.includes(cpu.socket)) return false;
+                   if (validCase && c.type.includes('Air') && validCase.maxCpuHeight < c.height) return false;
+                   return true;
+                });
+                if (cooler) currentPrice += cooler.price;
+                else continue; 
+            }
 
             let psu = null;
             if (config.usePsu) {
@@ -4364,47 +4309,11 @@ if (config.useCooler) {
                 }
             }
 
-let fan = null;
-let fanCount = 1; // Default 1 fan
-let fanTotalCost = 0;
-
-if (config.useFan && validCase) {
-    let fanCandidates = lists.allFans;
-    
-    // If user selected specific fans with quantities, use those
-    if (selectedOptions.fanNames.size > 0) {
-        const selectedFansList = [];
-        selectedOptions.fanNames.forEach((qty, name) => {
-            const f = DB.fan.get(name);
-            if (f && f.level <= config.lvl) {
-                for(let i = 0; i < qty; i++) {
-                    selectedFansList.push(f);
-                }
+            let fan = null;
+            if (config.useFan && validCase) {
+                fan = lists.allFans.find(f => true);
+                if (fan) currentPrice += fan.price;
             }
-        });
-        
-        if (selectedFansList.length > 0) {
-            // Use first fan for storage, count for totals
-            fan = selectedFansList[0];
-            fanCount = selectedFansList.length;
-            fanTotalCost = selectedFansList.reduce((sum, f) => sum + f.price, 0);
-        } else {
-            continue; // User wanted specific fans but none are valid
-        }
-    } else {
-        // Use cheapest compatible fan
-        fan = fanCandidates.find(f => {
-            const radSizes = validCase.radSizes || "";
-            if (f.size === 120 && radSizes.includes('120')) return true;
-            if (f.size === 140 && radSizes.includes('140')) return true;
-            if (f.size === 200 && radSizes.includes('200')) return true;
-            return false;
-        });
-        if (fan) fanTotalCost = fan.price;
-    }
-    
-    if (fan) currentPrice += fanTotalCost;
-}
 
             currentPrice += lists.totalStorageCost;
             if (currentPrice > config.budget) continue;
@@ -5248,4 +5157,4 @@ if (type === 'fan') {
 
 </script>
 </body>
-</html>
+    </html>
