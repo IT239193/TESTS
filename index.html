@@ -3137,12 +3137,13 @@ function refreshDropdowns() {
     }
 }
 
+
 function populateMultiSelect(category, options, containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
         container.innerHTML = '';
         
-        // Fix: Include fanNames in this check so it uses the Map logic (Quantity) instead of Set logic
+        // 1. Ensure 'fanNames' is included here so it uses the Quantity Logic (+/-)
         const isQtyType = (category === 'ssdNames' || category === 'hddNames' || category === 'fanNames' || category === 'ramNames');
 
         options.forEach((opt, index) => {
@@ -3151,8 +3152,9 @@ function populateMultiSelect(category, options, containerId) {
             let isSelected = false;
             let count = 0;
 
+            // Determine selection state
             if (isQtyType) {
-                // Map Logic (Qty)
+                // Map Logic (Quantity)
                 if (selectedOptions[category].has(opt)) {
                     isSelected = true;
                     count = selectedOptions[category].get(opt);
@@ -3168,7 +3170,7 @@ function populateMultiSelect(category, options, containerId) {
             
             let label = opt;
             
-            // --- UPDATED LABEL FORMATTING ---
+            // --- UPDATED LABEL FORMATTING (Name | Size | Airflow | Price) ---
             if (category === 'ramNames') {
                 const r = DB.ram.get(opt);
                 if (r) label = `<span style="font-size:1.1em"><b>${r.mfgr}</b> ${r.name} | ${r.size}GB | ${r.freq}MHz | $${r.price}</span>`;
@@ -3179,15 +3181,15 @@ function populateMultiSelect(category, options, containerId) {
                 const c = DB.cases.get(opt);
                 if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Len: ${c.maxGpuLen}mm | $${c.price}</span>`;
             } 
-            // COOLER INFO: Name | Size | Airflow | Price
+            // COOLER INFO
             else if (category === 'coolerNames') {
                 const c = DB.cooler.get(opt);
                 if (c) {
-                    const sizeInfo = c.type.includes('Liquid') ? `Rad: ${c.size}mm` : `Height: ${c.height}mm`;
+                    const sizeInfo = c.type.includes('Liquid') ? `${c.size}mm (Rad)` : `${c.height}mm (H)`;
                     label = `<span style="font-size:0.9em"><b>${c.name}</b> | ${sizeInfo} | ${c.flow} CFM | <b style="color:var(--price-red)">$${c.price}</b></span>`;
                 }
             } 
-            // FAN INFO: Name | Size | Airflow | Price
+            // FAN INFO
             else if (category === 'fanNames') {
                 const f = DB.fan.get(opt);
                 if (f) {
@@ -3201,8 +3203,9 @@ function populateMultiSelect(category, options, containerId) {
 
             const safeName = opt.replace(/'/g, "\\'");
 
+            // Render HTML based on Type
             if (isQtyType) {
-                // Quantity Controls (Uses generic toggleQtySelection)
+                // Renders +/- buttons
                 div.innerHTML = `
                     <div class="option-left" onclick="toggleQtySelection('${category}', '${safeName}', 1)">
                         <div class="cb-custom"></div>
@@ -3215,7 +3218,7 @@ function populateMultiSelect(category, options, containerId) {
                     </div>
                 `;
             } else {
-                // Standard Select (Uses toggleOption)
+                // Renders standard selection
                 div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
                 div.onclick = (e) => toggleOption(category, opt, div, e);
             }
@@ -3224,8 +3227,8 @@ function populateMultiSelect(category, options, containerId) {
         });
         
         updateDisplayLabel(category);
-    }
-
+}
+    
 
 
 // --- GENERIC QUANTITY HANDLERS (Paste this to replace old Storage/RAM functions) ---
@@ -3466,55 +3469,58 @@ function refreshRamDropdown() {
     container.scrollTop = scrollTop;
 }
 
-    
-function toggleOption(category, value, element, event) {
-    // Handle Shift+Click Range Selection
-    if (event.shiftKey && lastClickedOption.category === category && lastClickedOption.index !== -1) {
-        const container = element.parentElement;
-        // Get only currently visible options
-        const options = Array.from(container.children).filter(c => c.style.display !== 'none');
-        const currentIndex = options.indexOf(element);
-        const lastIndex = options.findIndex(opt => parseInt(opt.dataset.index) === lastClickedOption.index);
+    function toggleOption(category, value, element, event) {
+        // --- CRASH FIX START ---
+        // If this function is called on a Map (Fan, RAM, Storage), redirect to Qty logic
+        if (selectedOptions[category] instanceof Map) {
+            toggleQtySelection(category, value, 1);
+            return;
+        }
+        // --- CRASH FIX END ---
 
-        if (currentIndex !== -1 && lastIndex !== -1) {
-            const start = Math.min(currentIndex, lastIndex);
-            const end = Math.max(currentIndex, lastIndex);
-            
-            for (let i = start; i <= end; i++) {
-                const opt = options[i];
-                const val = opt.dataset.value;
+        // Handle Shift+Click Range Selection
+        if (event.shiftKey && lastClickedOption.category === category && lastClickedOption.index !== -1) {
+            const container = element.parentElement;
+            const options = Array.from(container.children).filter(c => c.style.display !== 'none');
+            const currentIndex = options.indexOf(element);
+            const lastIndex = options.findIndex(opt => parseInt(opt.dataset.index) === lastClickedOption.index);
+
+            if (currentIndex !== -1 && lastIndex !== -1) {
+                const start = Math.min(currentIndex, lastIndex);
+                const end = Math.max(currentIndex, lastIndex);
                 
-                // Add to selection set
-                if (category === 'gpuCount') selectedOptions[category].add(parseInt(val));
-                else selectedOptions[category].add(val);
-                
-                opt.classList.add('selected');
+                for (let i = start; i <= end; i++) {
+                    const opt = options[i];
+                    const val = opt.dataset.value;
+                    
+                    // Add to selection set
+                    if (category === 'gpuCount') selectedOptions[category].add(parseInt(val));
+                    else selectedOptions[category].add(val);
+                    
+                    opt.classList.add('selected');
+                }
+            }
+        } 
+        // Handle Standard Click (Toggle)
+        else {
+            if (selectedOptions[category].has(value)) {
+                selectedOptions[category].delete(value);
+                element.classList.remove('selected');
+            } else {
+                selectedOptions[category].add(value);
+                element.classList.add('selected');
             }
         }
-    } 
-    // Handle Standard Click (Toggle)
-    else {
-        if (selectedOptions[category].has(value)) {
-            selectedOptions[category].delete(value);
-            element.classList.remove('selected');
-        } else {
-            selectedOptions[category].add(value);
-            element.classList.add('selected');
+
+        // Update state for next click
+        lastClickedOption = { category: category, index: parseInt(element.dataset.index) };
+        
+        updateDisplayLabel(category);
+
+        if (['ramMfgrs', 'ramFreqs', 'ramSizes'].includes(category)) {
+            refreshRamOptions();
         }
     }
-
-    // Update state for next click
-    lastClickedOption = { category: category, index: parseInt(element.dataset.index) };
-    
-    // Update the label text (e.g. "3 selected")
-    updateDisplayLabel(category);
-
-    // --- NEW LOGIC: Update Specific RAM List ---
-    // If we just clicked a Manufacturer, Frequency, or Size, refresh the specific model list
-    if (['ramMfgrs', 'ramFreqs', 'ramSizes'].includes(category)) {
-        refreshRamOptions();
-    }
-}
 
 
     function applyQuickFilter(category, type) {
