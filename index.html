@@ -3137,90 +3137,165 @@ function refreshDropdowns() {
     }
 }
 
-// 3. POPULATE MULTI SELECT (With Price/Flow Info & Crash Fix)
 function populateMultiSelect(category, options, containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return; // Safety check
-    container.innerHTML = '';
-    
-    const isQtyType = (category === 'ssdNames' || category === 'hddNames' || category === 'fanNames' || category === 'ramNames');
-
-    options.forEach((opt, index) => {
-        const div = document.createElement('div');
-        div.className = 'multi-option';
-        let isSelected = false;
-        let count = 0;
-
-        if (isQtyType) {
-            if (selectedOptions[category].has(opt)) {
-                isSelected = true;
-                count = selectedOptions[category].get(opt);
-            }
-        } else {
-            if (selectedOptions[category].has(opt)) isSelected = true;
-        }
-
-        if (isSelected) div.classList.add('selected');
-        div.dataset.value = opt;
-        div.dataset.index = index; 
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
         
-        let label = opt;
-        
-        // --- LABEL FORMATTING ---
-        if (category === 'ramNames') {
-            const r = DB.ram.get(opt);
-            if (r) label = `<span style="font-size:1.1em"><b>${r.mfgr}</b> ${r.name} | ${r.size}GB | ${r.freq}MHz | $${r.price}</span>`;
-        } else if (category === 'moboNames') {
-            const m = DB.mobo.get(opt);
-            if (m) label = `<span style="font-size:0.9em">${m.name} | ${m.size} | Slots: ${m.pciSlots}</span>`;
-        } else if (category === 'caseNames') {
-            const c = DB.cases.get(opt);
-            if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Len: ${c.maxGpuLen}mm | $${c.price}</span>`;
-        } 
-        // COOLER INFO: Name | Type | Size | Flow | Price
-        else if (category === 'coolerNames') {
-            const c = DB.cooler.get(opt);
-            if (c) {
-                const sizeInfo = c.type.includes('Liquid') ? `Rad: ${c.size}mm` : `H: ${c.height}mm`;
-                label = `<span style="font-size:0.9em"><b>${c.name}</b> | ${c.type} | ${sizeInfo} | ${c.flow} CFM | <b style="color:var(--price-red)">$${c.price}</b></span>`;
-            }
-        } 
-        // FAN INFO: Name | Size | Flow | Price
-        else if (category === 'fanNames') {
-            const f = DB.fan.get(opt);
-            if (f) {
-                label = `<span style="font-size:0.9em"><b>${f.name}</b> | ${f.size}mm | ${f.flow} CFM | <b style="color:var(--price-red)">$${f.price}</b></span>`;
-            }
-        } 
-        else if ((category === 'ssdNames' || category === 'hddNames') && DB.storage.get(opt)) {
-             const s = DB.storage.get(opt);
-             label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr}</span>`;
-        }
+        // Fix: Include fanNames in this check so it uses the Map logic (Quantity) instead of Set logic
+        const isQtyType = (category === 'ssdNames' || category === 'hddNames' || category === 'fanNames' || category === 'ramNames');
 
-        const safeName = opt.replace(/'/g, "\\'");
+        options.forEach((opt, index) => {
+            const div = document.createElement('div');
+            div.className = 'multi-option';
+            let isSelected = false;
+            let count = 0;
 
-        if (isQtyType) {
-            div.innerHTML = `
-                <div class="option-left" onclick="toggleQtySelection('${category}', '${safeName}', 1)">
-                    <div class="cb-custom"></div>
-                    <span>${label}</span>
-                </div>
-                <div class="qty-controls" onclick="event.stopPropagation()">
-                    <button class="qty-btn" onclick="modifyQty('${category}', '${safeName}', -1)">-</button>
-                    <span class="qty-val">${count}</span>
-                    <button class="qty-btn" onclick="modifyQty('${category}', '${safeName}', 1)">+</button>
-                </div>
-            `;
-        } else {
-            div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
-            div.onclick = (e) => toggleOption(category, opt, div, e);
-        }
+            if (isQtyType) {
+                // Map Logic (Qty)
+                if (selectedOptions[category].has(opt)) {
+                    isSelected = true;
+                    count = selectedOptions[category].get(opt);
+                }
+            } else {
+                // Set Logic (Toggle)
+                if (selectedOptions[category].has(opt)) isSelected = true;
+            }
+
+            if (isSelected) div.classList.add('selected');
+            div.dataset.value = opt;
+            div.dataset.index = index; 
+            
+            let label = opt;
+            
+            // --- UPDATED LABEL FORMATTING ---
+            if (category === 'ramNames') {
+                const r = DB.ram.get(opt);
+                if (r) label = `<span style="font-size:1.1em"><b>${r.mfgr}</b> ${r.name} | ${r.size}GB | ${r.freq}MHz | $${r.price}</span>`;
+            } else if (category === 'moboNames') {
+                const m = DB.mobo.get(opt);
+                if (m) label = `<span style="font-size:0.9em">${m.name} | ${m.size} | Slots: ${m.pciSlots}</span>`;
+            } else if (category === 'caseNames') {
+                const c = DB.cases.get(opt);
+                if (c) label = `<span style="font-size:0.9em">${c.name} | GPU Len: ${c.maxGpuLen}mm | $${c.price}</span>`;
+            } 
+            // COOLER INFO: Name | Size | Airflow | Price
+            else if (category === 'coolerNames') {
+                const c = DB.cooler.get(opt);
+                if (c) {
+                    const sizeInfo = c.type.includes('Liquid') ? `Rad: ${c.size}mm` : `Height: ${c.height}mm`;
+                    label = `<span style="font-size:0.9em"><b>${c.name}</b> | ${sizeInfo} | ${c.flow} CFM | <b style="color:var(--price-red)">$${c.price}</b></span>`;
+                }
+            } 
+            // FAN INFO: Name | Size | Airflow | Price
+            else if (category === 'fanNames') {
+                const f = DB.fan.get(opt);
+                if (f) {
+                    label = `<span style="font-size:0.9em"><b>${f.name}</b> | ${f.size}mm | ${f.flow} CFM | <b style="color:var(--price-red)">$${f.price}</b></span>`;
+                }
+            } 
+            else if ((category === 'ssdNames' || category === 'hddNames') && DB.storage.get(opt)) {
+                 const s = DB.storage.get(opt);
+                 label = `<span style="font-size:0.9em">${s.name} | ${s.sizeStr}</span>`;
+            }
+
+            const safeName = opt.replace(/'/g, "\\'");
+
+            if (isQtyType) {
+                // Quantity Controls (Uses generic toggleQtySelection)
+                div.innerHTML = `
+                    <div class="option-left" onclick="toggleQtySelection('${category}', '${safeName}', 1)">
+                        <div class="cb-custom"></div>
+                        <span>${label}</span>
+                    </div>
+                    <div class="qty-controls" onclick="event.stopPropagation()">
+                        <button class="qty-btn" onclick="modifyQty('${category}', '${safeName}', -1)">-</button>
+                        <span class="qty-val">${count}</span>
+                        <button class="qty-btn" onclick="modifyQty('${category}', '${safeName}', 1)">+</button>
+                    </div>
+                `;
+            } else {
+                // Standard Select (Uses toggleOption)
+                div.innerHTML = `<div class="cb-custom"></div><span>${label}</span>`;
+                div.onclick = (e) => toggleOption(category, opt, div, e);
+            }
+            
+            container.appendChild(div);
+        });
         
-        container.appendChild(div);
-    });
-    
+        updateDisplayLabel(category);
+    }
+
+
+
+// --- GENERIC QUANTITY HANDLERS (Paste this to replace old Storage/RAM functions) ---
+
+// 1. Toggle Selection (Used when clicking the item row)
+window.toggleQtySelection = function(category, value, defaultQty) {
+    if (selectedOptions[category].has(value)) {
+        selectedOptions[category].delete(value);
+    } else {
+        selectedOptions[category].set(value, defaultQty);
+    }
+    triggerCategoryRefresh(category);
     updateDisplayLabel(category);
 }
+
+// 2. Modify Quantity (Used when clicking + or - buttons)
+window.modifyQty = function(category, value, delta) {
+    let current = selectedOptions[category].get(value) || 0;
+    let next = current + delta;
+    
+    if (next <= 0) {
+        selectedOptions[category].delete(value);
+    } else {
+        selectedOptions[category].set(value, next);
+    }
+    
+    triggerCategoryRefresh(category);
+    updateDisplayLabel(category);
+}
+
+// 3. Helper to refresh the specific dropdown list UI
+function triggerCategoryRefresh(category) {
+    if (category === 'fanNames') {
+        // Fans use the main refresh logic because they depend on Case/Rad size
+        refreshDropdowns(); 
+    } 
+    else if (category === 'ramNames') {
+        refreshRamDropdown();
+    } 
+    else if (category === 'ssdNames' || category === 'hddNames') {
+        refreshStorageDropdown(category);
+    }
+}
+
+// 4. Specific Refreshers (Keep these to maintain scroll position)
+function refreshRamDropdown() {
+    const container = document.getElementById('ramListContainer');
+    if(!container) return;
+    const scrollTop = container.scrollTop;
+    refreshRamOptions(); 
+    container.scrollTop = scrollTop;
+}
+
+function refreshStorageDropdown(category) {
+    const containerId = category === 'ssdNames' ? 'ssdListContainer' : 'hddListContainer';
+    const list = (category === 'ssdNames') ? 
+        Array.from(DB.storage.values()).filter(s => (s.type === 'SSD' || s.type === 'M.2')) :
+        Array.from(DB.storage.values()).filter(s => s.type === 'HDD');
+    
+    const currentLvl = parseInt(document.getElementById('level').value) || 30;
+    const validList = list.filter(s => s.level <= currentLvl);
+
+    const container = document.getElementById(containerId);
+    if(!container) return;
+    const scrollTop = container.scrollTop;
+    populateMultiSelect(category, validList.map(s=>s.name).sort(), containerId);
+    container.scrollTop = scrollTop;
+}
+
+
     function populateStorageSizeButtons(type, list) {
         const container = document.getElementById(type + 'QuickFilter');
         const oldBtns = container.querySelectorAll('.btn-size-filter');
@@ -3370,25 +3445,7 @@ div.innerHTML = `
         updateDisplayLabel(category);
     }
 
-    window.toggleStorageSelection = function(category, value, defaultQty) {
-        if (selectedOptions[category].has(value)) {
-            selectedOptions[category].delete(value);
-        } else {
-            selectedOptions[category].set(value, defaultQty);
-        }
-        refreshStorageDropdown(category);
-        updateDisplayLabel(category);
-    }
-
-    window.modifyStorageQty = function(category, value, delta) {
-        let current = selectedOptions[category].get(value) || 0;
-        let next = current + delta;
-        if (next <= 0) selectedOptions[category].delete(value);
-        else selectedOptions[category].set(value, next);
-        refreshStorageDropdown(category);
-        updateDisplayLabel(category);
-    }
-
+   
     function refreshStorageDropdown(category) {
         const containerId = category === 'ssdNames' ? 'ssdListContainer' : 'hddListContainer';
         const list = (category === 'ssdNames') ? 
@@ -3400,31 +3457,6 @@ div.innerHTML = `
         populateMultiSelect(category, list.map(s=>s.name).sort(), containerId);
         container.scrollTop = scrollTop;
     }
-
-
-// NEW FUNCTION 1: Toggle RAM selection
-window.toggleRamSelection = function(value, defaultQty) {
-    if (selectedOptions.ramNames.has(value)) {
-        selectedOptions.ramNames.delete(value);
-    } else {
-        selectedOptions.ramNames.set(value, defaultQty);
-    }
-    refreshRamDropdown();
-    updateDisplayLabel('ramNames');
-}
-
-// NEW FUNCTION 2: Modify RAM quantity
-window.modifyRamQty = function(value, delta) {
-    let current = selectedOptions.ramNames.get(value) || 0;
-    let next = current + delta;
-    if (next <= 0) {
-        selectedOptions.ramNames.delete(value);
-    } else {
-        selectedOptions.ramNames.set(value, next);
-    }
-    refreshRamDropdown();
-    updateDisplayLabel('ramNames');
-}
 
 // NEW FUNCTION 3: Refresh RAM dropdown
 function refreshRamDropdown() {
@@ -5192,4 +5224,4 @@ if (type === 'fan') {
 
 </script>
 </body>
-</html>
+                    </html>
